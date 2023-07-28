@@ -1,3 +1,3 @@
 ## Start the server
 
-`uvicorn api/main:app --reload`
+`uvicorn main:app --reload`
