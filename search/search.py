@@ -2,7 +2,7 @@ from transformers import AutoTokenizer, AutoModel
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
 import torch
-from utils import load_embeddings, load_lookup
+from .utils import load_embeddings, load_lookup
 
 
 class SemanticSearch:

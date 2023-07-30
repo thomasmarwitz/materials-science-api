@@ -1,9 +1,9 @@
 import torch
 import numpy as np
 
-from graph import Graph
-from net import Network
-from search.utils import load_compressed, load_lookup
+from .graph import Graph
+from .net import Network
+from .utils import load_compressed, load_lookup
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print("Device:", device)
@@ -32,10 +32,12 @@ class Predictor:
         logger.info(f"Loading lookup from '{lookup}'")
         self.lookup = load_lookup(lookup)
         self.lookup_c_id = {
-            concept: id for concept, id in zip(lookup["concept"], lookup["id"])
+            concept: id
+            for concept, id in zip(self.lookup["concept"], self.lookup["id"])
         }
         self.lookup_id_c = {
-            id: concept for concept, id in zip(lookup["concept"], lookup["id"])
+            id: concept
+            for concept, id in zip(self.lookup["concept"], self.lookup["id"])
         }
 
         logger.info(f"Loading model from '{model}' with layers '{layers}'")
@@ -97,7 +99,7 @@ class Predictor:
 
     @staticmethod
     def load_model(layers: str, path: str):
-        layers = layers.split(",")
+        layers = [int(l) for l in layers.split(",")]
         model = Network(layers).to(device)
 
         model.load_state_dict(

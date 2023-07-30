@@ -9,9 +9,5 @@ def load_compressed(path):
     return pickle.loads(gzip.decompress(compressed))
 
 
-def load_lookup(
-    l,
-    lookup_path="data/lookup/lookup_medium.csv",
-):
-    l.info(f"Loading lookup from {lookup_path}")
+def load_lookup(lookup_path):
     return pd.read_csv(lookup_path)
