@@ -6,7 +6,7 @@ from utils import load_embeddings, load_lookup
 
 
 class SemanticSearch:
-    def __init__(self, logger, embeddings: str, model_name):
+    def __init__(self, logger, embeddings: str, model_name: str):
         self.logger = logger
         self.data = load_embeddings(embeddings)
         self.values = np.array(list(self.data.values()))
