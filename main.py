@@ -29,7 +29,9 @@ def setup_logger(file, level=logging.INFO, log_to_stdout=True):
     return logger
 
 
-logger = setup_logger(os.getenv("LOGS"), level=logging.INFO, log_to_stdout=True)
+logger = setup_logger(
+    os.getenv("LOGS"), level=int(os.getenv("LOG_LEVEL")), log_to_stdout=True
+)
 
 origins = ["*"]
 
