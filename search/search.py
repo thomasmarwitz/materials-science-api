@@ -5,44 +5,14 @@ import torch
 from utils import load_embeddings, load_lookup
 
 
-def score(distance):
-    if distance < 0:
-        raise ValueError("Distance must be a non-negative number.")
-
-    elif distance <= 10:
-        return 100 - ((distance - 0) / (10 - 0)) * (100 - 90)
-
-    elif distance <= 15:
-        return 90 - ((distance - 10) / (15 - 10)) * (90 - 60)
-
-    elif distance <= 20:
-        return 60 - ((distance - 15) / (20 - 15)) * (60 - 20)
-
-    elif distance <= 30:
-        return 20 - ((distance - 20) / (30 - 20)) * (20 - 5)
-
-    else:
-        return max(
-            5 - ((distance - 30) / (100 - 30)) * 5, 0
-        )  # The 100 here is a presumed upper limit for interpolation
-
-
-def setup_model(model_name):
-    print("Setting up model")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModel.from_pretrained(model_name)
-
-    return tokenizer, model
-
-
 class SemanticSearch:
     def __init__(self, logger, embeddings: str, model_name):
         self.logger = logger
         self.data = load_embeddings(embeddings)
         self.values = np.array(list(self.data.values()))
         self.keys = np.array(list(self.data.keys()))
-        print("Fitting knn")
-        self.tokenizer, self.model = setup_model(model_name)
+        self.logger.info("Fitting knn")
+        self.tokenizer, self.model = self.setup_model(model_name)
 
     def _nn_search(self, string, k):
         if k is None:
@@ -54,10 +24,7 @@ class SemanticSearch:
         else:
             emb = self.data[string]
 
-        return [
-            dict(match=c, score=round(score(d), 1), distance=d)
-            for c, d in self._get_knn(emb, nbrs)
-        ]
+        return [dict(match=c, distance=d) for c, d in self._get_knn(emb, nbrs)]
 
     def _get_embeddings(self, string):
         tokens = self.tokenizer(string)["input_ids"]
@@ -78,6 +45,13 @@ class SemanticSearch:
 
     def search(self, string, k=None):
         return self._nn_search(string, k)
+
+    def setup_model(self, model_name):
+        self.logger.info(f"Setting up model: '{model_name}'")
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModel.from_pretrained(model_name)
+
+        return tokenizer, model
 
 
 class PlainSearch:
