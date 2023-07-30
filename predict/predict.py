@@ -66,13 +66,17 @@ class Predictor:
         outs = outs.detach().cpu().numpy().flatten()
 
         self.logger.debug("Sorting results")
-        results = [
-            (self.lookup_id_c[id_other.item()], score)
-            for (_, id_other), score in zip(pairs, outs)
-        ]
-        results.sort(key=lambda x: x[1], reverse=True)
+        sorted_indices = np.argsort(outs)[::-1]
 
-        return results[:k]
+        top_k_indices = sorted_indices[:k]
+
+        self.logger.debug("Creating response data")
+        results = [
+            dict(concept=self.lookup_id_c[pairs[i][1].item()], score=float(outs[i]))
+            for i in top_k_indices
+        ]
+
+        return results
 
     def _get_pairs(self, concept_id, max_degree=None, max_depth=None):
         unconnected = []
@@ -81,7 +85,7 @@ class Predictor:
             if other == concept_id:
                 continue
 
-            if max_degree is not None and self.g.degree[other] > max_degree:
+            if max_degree is not None and self.g_nx.degree[other] > max_degree:
                 continue
 
             if self.g_nx.has_edge(concept_id, other):
