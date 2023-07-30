@@ -78,7 +78,8 @@ def search(query: str, semantic: bool = False, k: int = 10):
 
 @app.get("/predict")
 def predict(concept: str, max_degree: int = None, max_depth: int = None, k: int = 10):
-    return None
+    logger.info(f"Predicting for concept: '{concept}'")
+    return predictor.predict(concept, max_degree, max_depth, k)
 
 
 @app.get("/predict_pair")
