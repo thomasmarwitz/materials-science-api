@@ -24,7 +24,7 @@ class SemanticSearch:
         else:
             emb = self.data[string]
 
-        return [dict(match=c, distance=d) for c, d in self._get_knn(emb, nbrs)]
+        return [dict(concept=c, distance=d) for c, d in self._get_knn(emb, nbrs)]
 
     def _get_embeddings(self, string):
         tokens = self.tokenizer(string)["input_ids"]
@@ -71,7 +71,7 @@ class PlainSearch:
 
     def _plain_search(self, string):
         return [
-            dict(match=concept, count=count)
+            dict(concept=concept, count=count)
             for concept, count in zip(self.df["concept"], self.df["count"])
             if string in concept
         ]
