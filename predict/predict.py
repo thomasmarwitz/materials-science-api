@@ -51,21 +51,30 @@ class Predictor:
     def predict(
         self, concept: str, max_degree: int = None, max_depth: int = None, k: int = 10
     ):
+        self.logger.debug(f"Predicting for '{concept}'")
         concept_id = self.lookup_c_id[concept]
 
-        pairs = self.get_pairs(concept_id, max_degree, max_depth)
+        self.logger.debug("Getting pairs")
+        pairs = self._get_pairs(concept_id, max_degree, max_depth)
+        self.logger.debug(f"Got {len(pairs)} pairs")
 
-        inputs = self.get_embeddings(pairs).to(device)
+        self.logger.debug("Getting embeddings")
+        inputs = self._get_embeddings(pairs).to(device)
 
+        self.logger.debug("Predicting")
         outs = self.model(inputs)
         outs = outs.detach().cpu().numpy().flatten()
 
-        results = [(self.lookup_id_c[id], score) for id, score in zip(pairs, outs)]
+        self.logger.debug("Sorting results")
+        results = [
+            (self.lookup_id_c[id_other.item()], score)
+            for (_, id_other), score in zip(pairs, outs)
+        ]
         results.sort(key=lambda x: x[1], reverse=True)
 
         return results[:k]
 
-    def get_pairs(self, concept_id, max_degree=None, max_depth=None):
+    def _get_pairs(self, concept_id, max_degree=None, max_depth=None):
         unconnected = []
 
         for other in self.g.vertices:
@@ -82,7 +91,7 @@ class Predictor:
 
         return torch.tensor([(concept_id, other) for other in unconnected])
 
-    def get_embeddings(self, pairs):
+    def _get_embeddings(self, pairs):
         l = []
         for v1, v2 in pairs:
             i1 = int(v1.item())
