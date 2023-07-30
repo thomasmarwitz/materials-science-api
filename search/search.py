@@ -1,10 +1,8 @@
 from transformers import AutoTokenizer, AutoModel
-import pickle
-import gzip
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
 import torch
-import pandas as pd
+from utils import load_embeddings, load_lookup
 
 
 def score(distance):
@@ -37,25 +35,19 @@ def setup_model(model_name):
     return tokenizer, model
 
 
-def load_compressed(path):
-    with open(path, "rb") as f:
-        compressed = f.read()
-    return pickle.loads(gzip.decompress(compressed))
-
-
-def convert_tensors_to_arrays(data):
-    return {k: v.numpy() for k, v in data.items()}
-
-
 class SemanticSearch:
-    def __init__(self, data, model_name):
-        self.data = data
+    def __init__(self, logger, embeddings: str, model_name):
+        self.logger = logger
+        self.data = load_embeddings(embeddings)
         self.values = np.array(list(self.data.values()))
         self.keys = np.array(list(self.data.keys()))
         print("Fitting knn")
         self.tokenizer, self.model = setup_model(model_name)
 
     def _nn_search(self, string, k):
+        if k is None:
+            k = self.values.shape[0]  # default to all concepts
+
         nbrs = NearestNeighbors(n_neighbors=k, algorithm="auto").fit(self.values)
         if string not in self.keys:
             emb = self._get_embeddings(string)
@@ -84,18 +76,24 @@ class SemanticSearch:
             (self.keys[i], round(float(d), 3)) for i, d in zip(indices[0], distances[0])
         ]
 
-    def search(self, string, k=10):
+    def search(self, string, k=None):
         return self._nn_search(string, k)
 
 
 class PlainSearch:
-    def __init__(self, df):
-        self.df = df
+    def __init__(self, logger, lookup: str):
+        self.logger = logger
+        self.df = load_lookup(lookup)
 
-    def search(self, string, k=10):
-        return sorted(
+    def search(self, string, k=None):
+        results = sorted(
             self._plain_search(string), key=lambda x: x["count"], reverse=True
-        )[:k]
+        )
+
+        if k:
+            return results[:k]
+
+        return results
 
     def _plain_search(self, string):
         return [
@@ -103,24 +101,3 @@ class PlainSearch:
             for concept, count in zip(self.df["concept"], self.df["count"])
             if string in concept
         ]
-
-
-print("Loading data")
-CONCEPT_PATH = "data/embeddings/embeddings.full.M.pkl.gz"
-data = convert_tensors_to_arrays(load_compressed(CONCEPT_PATH))
-
-sem_search = SemanticSearch(
-    data,
-    model_name="m3rg-iitd/matscibert",
-)
-
-
-plain_search = PlainSearch(pd.read_csv("data/lookup/lookup_medium.csv"))
-
-# semantic relevance score
-# 0 - 5: 100-95
-# 5-10: 95-80
-# 10-15: 80-40
-# 15-20: 40-20
-# 20-30: 20-5
-# 30-inf: 5-0
