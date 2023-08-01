@@ -68,7 +68,7 @@ predictor = Predictor(
 
 
 @app.get("/search")
-def search(query: str, semantic: bool = False, k: int = 10):
+def search(query: str, semantic: bool = False, k: int = None):
     logger.info(f"Searching term: '{query}'")
     if semantic:
         return sem_search.search(query, k=k)
@@ -77,9 +77,11 @@ def search(query: str, semantic: bool = False, k: int = 10):
 
 
 @app.get("/predict")
-def predict(concept: str, max_degree: int = None, max_depth: int = None, k: int = 10):
+async def predict(
+    concept: str, max_degree: int = None, min_depth: int = None, k: int = 10
+):
     logger.info(f"Predicting for concept: '{concept}'")
-    return predictor.predict(concept, max_degree, max_depth, k)
+    return await predictor.predict(concept, max_degree, min_depth, k)
 
 
 @app.get("/predict_pair")

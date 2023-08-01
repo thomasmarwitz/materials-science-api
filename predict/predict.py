@@ -1,6 +1,8 @@
 import torch
 import numpy as np
+from asyncio import Lock
 
+from .bfs import bfs
 from .graph import Graph
 from .net import Network
 from .utils import load_compressed, load_lookup
@@ -47,41 +49,30 @@ class Predictor:
         _graph = Graph.from_path(graph)
         self.g = Graph.from_edge_list(_graph.get_until_year(since))
         self.g_nx = _graph.get_nx_graph(since)
+        self.graph_bfs_lock = Lock()
 
-    def predict(
-        self, concept: str, max_degree: int = None, max_depth: int = None, k: int = 10
+    async def predict(
+        self, concept: str, max_degree: int = None, min_depth: int = None, k: int = 10
     ):
-        self.logger.debug(f"Predicting for '{concept}'")
         concept_id = self.lookup_c_id[concept]
-
-        self.logger.debug("Getting pairs")
-        pairs = self._get_pairs(concept_id, max_degree, max_depth)
-        self.logger.debug(f"Got {len(pairs)} pairs")
-
-        self.logger.debug("Getting embeddings")
+        pairs = await self._get_pairs(
+            concept_id, max_degree, min_depth
+        )  # decide which constellations to predict
         inputs = self._get_embeddings(pairs).to(device)
-
-        self.logger.debug("Predicting")
-        outs = self.model(inputs)
-        outs = outs.detach().cpu().numpy().flatten()
-
-        self.logger.debug("Sorting results")
-        sorted_indices = np.argsort(outs)[::-1]
-
-        top_k_indices = sorted_indices[:k]
-
-        self.logger.debug("Creating response data")
-        results = [
-            dict(concept=self.lookup_id_c[pairs[i][1].item()], score=float(outs[i]))
-            for i in top_k_indices
-        ]
-
+        outs = self._predict(inputs)
+        results = self._create_response(outs, pairs, k)
         return results
 
-    def _get_pairs(self, concept_id, max_degree=None, max_depth=None):
+    async def _get_pairs(self, concept_id, max_degree=None, min_depth=None):
+        self.logger.debug("Getting pairs")
         unconnected = []
 
-        for other in self.g.vertices:
+        vertices = self.g.vertices
+
+        if min_depth is not None:
+            vertices = await self._filter_depth(vertices, concept_id, min_depth)
+
+        for other in vertices:
             if other == concept_id:
                 continue
 
@@ -93,9 +84,24 @@ class Predictor:
 
             unconnected.append(other)
 
-        return torch.tensor([(concept_id, other) for other in unconnected])
+        pairs = torch.tensor([(concept_id, other) for other in unconnected])
+        self.logger.debug(f"Got {len(pairs)} pairs")
+        return pairs
+
+    async def _filter_depth(self, vertices, concept_id, min_depth):
+        async with self.graph_bfs_lock:
+            self.logger.debug("Running BFS")
+            bfs(self.g_nx, concept_id)
+            self.logger.debug("Depths annoated")
+
+            vertices = [
+                node for node in vertices if self.g_nx.nodes[node]["depth"] >= min_depth
+            ]
+
+        return vertices
 
     def _get_embeddings(self, pairs):
+        self.logger.debug("Getting embeddings")
         l = []
         for v1, v2 in pairs:
             i1 = int(v1.item())
@@ -109,6 +115,23 @@ class Predictor:
 
             l.append(np.concatenate([emb1_f, emb2_f, emb1_c, emb2_c]))
         return torch.tensor(np.array(l)).float()
+
+    def _predict(self, inputs):
+        self.logger.debug("Predicting")
+        outs = self.model(inputs)
+        outs = outs.detach().cpu().numpy().flatten()
+        return outs
+
+    def _create_response(self, outs, pairs, k):
+        self.logger.debug(f"Creating response of {k} data points")
+        sorted_indices = np.argsort(outs)[::-1]
+
+        top_k_indices = sorted_indices[:k]
+
+        return [
+            dict(concept=self.lookup_id_c[pairs[i][1].item()], score=float(outs[i]))
+            for i in top_k_indices
+        ]
 
     @staticmethod
     def load_model(layers: str, path: str):
