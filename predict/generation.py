@@ -85,7 +85,7 @@ class Generator:
         return self.prompt_template.format(**kwargs)
 
     def _strongest_neighbors(self, concept, k=5):
-        u = self._translate(concept)
+        u = self._convert(concept)
 
         return [
             self._translate(item)
