@@ -114,7 +114,11 @@ async def predict(
 
 @app.get("/generate_abstracts")
 def generate_abstracts(
-    concept_a: str, concept_b: str, k: int = 3, min_words=100, max_words=150
+    concept_a: str,
+    concept_b: str,
+    k: int = 3,
+    min_words: int = 100,
+    max_words: int = 150,
 ):
     if k > 10:  # not allowed
         k = 10

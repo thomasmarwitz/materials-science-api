@@ -60,23 +60,22 @@ class Generator:
         self.api = api
 
     def generate_abstracts(self, conceptX, conceptY, k, min_words, max_words):
-        prompt = self._gen_prompt(
-            conceptX, conceptY, k=k, min_words=min_words, max_words=max_words
-        )
-        return self.api.generate_abstracts(prompt)
+        neighborsX = self._strongest_neighbors(conceptX)
+        neighborsY = self._strongest_neighbors(conceptY)
 
-    def _gen_prompt(self, conceptX, conceptY, k, min_words, max_words):
-        u = self._convert(conceptX)
-        v = self._convert(conceptY)
-
-        return self._format_prompt(
+        prompt = self._format_prompt(
             topicX=conceptX,
             topicY=conceptY,
-            neighborsX=self._strongest_neighbors(u),
-            neighborsY=self._strongest_neighbors(v),
+            neighborsX=neighborsX,
+            neighborsY=neighborsY,
             k=k,
             min_words=min_words,
             max_words=max_words,
+        )
+        return dict(
+            abstracts=self.api.generate_abstracts(prompt),
+            neighbor_concepts=neighborsX + neighborsY,
+            prompt=prompt,
         )
 
     def _convert(self, concept):
@@ -85,7 +84,9 @@ class Generator:
     def _format_prompt(self, **kwargs):
         return self.prompt_template.format(**kwargs)
 
-    def _strongest_neighbors(self, u, k=5):
+    def _strongest_neighbors(self, concept, k=5):
+        u = self._translate(concept)
+
         return [
             self._translate(item)
             for item, _ in sorted(
