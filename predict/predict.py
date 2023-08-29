@@ -18,7 +18,7 @@ class Predictor:
         lookup: str,
         feature_embeddings: str,
         concept_embeddings: str,
-        graph: str,
+        graph: Graph,
         since: int,
         layers: str,
         model: str,
@@ -46,9 +46,8 @@ class Predictor:
         self.model = Predictor.load_model(layers, path=model)
 
         logger.info(f"Loading graph from '{graph}'")
-        _graph = Graph.from_path(graph)
-        self.g = Graph.from_edge_list(_graph.get_until_year(since))
-        self.g_nx = _graph.get_nx_graph(since)
+        self.g = Graph.from_edge_list(graph.get_until_year(since))
+        self.g_nx = graph.get_nx_graph(since)
         self.graph_bfs_lock = Lock()
 
     async def predict(

@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from search.search import SemanticSearch, PlainSearch
 from predict.predict import Predictor
-from predict.generation import generate_abstracts as _generate_abstracts
+from predict.generation import Generator, OpenAi
+from predict.graph import Graph
 import logging
 import sys
 import os
@@ -56,16 +57,37 @@ plain_search = PlainSearch(
     lookup=os.getenv("LOOKUP"),
 )
 
+
+openai = OpenAi(
+    logger=logger,
+    api_key=os.getenv("OPENAI_API_KEY"),
+    organization=os.getenv("OPENAI_ORG"),
+)
+
+logger.info(f"Loading graph from '{os.getenv('GRAPH')}'")
+G = Graph.from_path(os.getenv("GRAPH"))
+
 predictor = Predictor(
     logger=logger,
     lookup=os.getenv("LOOKUP"),
     feature_embeddings=os.getenv("FEATURE_EMBEDDINGS"),
     concept_embeddings=os.getenv("CONCEPT_EMBEDDINGS"),
-    graph=os.getenv("GRAPH"),
+    graph=G,
     since=int(os.getenv("SINCE")),
     layers=os.getenv("LAYERS"),
     model=os.getenv("MODEL"),
 )
+generator = Generator(
+    logger=logger,
+    graph=G,
+    since=int(os.getenv("SINCE")),
+    lookup_file="data/lookup/lookup.M.new.csv",
+    prompt_file="data/prompt.txt",
+    api=openai,
+)
+
+logger.debug("Freeing graph from memory")
+del G
 
 
 @app.get("/search")
@@ -85,16 +107,22 @@ async def predict(
     return await predictor.predict(concept, max_degree, min_depth, k)
 
 
-@app.get("/predict_pair")
-def predict_pair(concept_a: str, concepts_b: str):
-    return None
+# @app.get("/predict_pair")
+# def predict_pair(concept_a: str, concepts_b: str):
+#     return None
 
 
 @app.get("/generate_abstracts")
-def generate_abstracts(concept_a: str, concept_b: str, k: int = 5):
+def generate_abstracts(
+    concept_a: str, concept_b: str, k: int = 3, min_words=100, max_words=150
+):
     if k > 10:  # not allowed
         k = 10
 
-    response = _generate_abstracts(concept_a, concept_b, k=k)
-    logger.debug(response)
+    if max_words > 300:  # not allowed
+        max_words = 300
+
+    response = generator.generate_abstracts(
+        concept_a, concept_b, k=k, min_words=min_words, max_words=max_words
+    )
     return response
