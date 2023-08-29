@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from search.search import SemanticSearch, PlainSearch
 from predict.predict import Predictor
+from predict.generation import generate_abstracts as _generate_abstracts
 import logging
 import sys
 import os
@@ -87,3 +88,13 @@ async def predict(
 @app.get("/predict_pair")
 def predict_pair(concept_a: str, concepts_b: str):
     return None
+
+
+@app.get("/generate_abstracts")
+def generate_abstracts(concept_a: str, concept_b: str, k: int = 5):
+    if k > 10:  # not allowed
+        k = 10
+
+    response = _generate_abstracts(concept_a, concept_b, k=k)
+    logger.debug(response)
+    return response
