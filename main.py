@@ -114,8 +114,8 @@ async def predict(
 
 @app.get("/generate_abstracts")
 def generate_abstracts(
-    concept_a: str,
-    concept_b: str,
+    concept_a: str = "thermal stratification",
+    concept_b: str = "biomedical alloy",
     k: int = 3,
     min_words: int = 100,
     max_words: int = 150,
@@ -127,6 +127,11 @@ def generate_abstracts(
         max_words = 300
 
     response = generator.generate_abstracts(
-        concept_a, concept_b, k=k, min_words=min_words, max_words=max_words
+        concept_a,
+        concept_b,
+        k=k,
+        min_words=min_words,
+        max_words=max_words,
+        use_fine_tuned_model=False,  # use base model
     )
     return response

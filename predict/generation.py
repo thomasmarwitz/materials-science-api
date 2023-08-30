@@ -12,20 +12,28 @@ class OpenAi:
         openai.api_key = api_key
         openai.organization = organization
 
-    def generate_abstracts(self, prompt):
-        response = self._fetch_abstracts(prompt)
+    def generate_abstracts(self, prompt, use_fine_tuned_model=False):
+        response = self._fetch_abstracts(
+            prompt, use_fine_tuned_model=use_fine_tuned_model
+        )
         self.logger.debug(f"Response: {response}")
         parsed = self._parse_response(response)
         self.logger.debug(f"Parsed: {parsed}")
         return parsed
 
-    def _fetch_abstracts(self, prompt):
+    def _fetch_abstracts(self, prompt, use_fine_tuned_model=False):
+        model = (
+            "ft:gpt-3.5-turbo-0613:personal::7tBuesEf"  # isn't working. always use base
+            if use_fine_tuned_model
+            else "gpt-3.5-turbo"
+        )
+
         return openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model=model,
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a friendly AI agent that is an expert in the materials science domain.",
+                    "content": "You are a friendly AI agent that is an expert in the materials science domain and that can generate distinctively different abstracts.",
                 },
                 {
                     "role": "user",
@@ -43,6 +51,11 @@ class OpenAi:
         titles = re.findall(self.TITLE_PATTERN, data)
         abstracts = re.findall(self.ABSTRACT_PATTERN, data)
 
+        if len(abstracts) != len(titles):  # fallback if [/A] is missing
+            abstracts = [
+                paragraph.split("[A]")[1].strip() for paragraph in data.split("\n\n")
+            ]
+
         return [
             dict(title=title, abstract=abstract)
             for title, abstract in zip(titles, abstracts)
@@ -50,7 +63,7 @@ class OpenAi:
 
 
 class Generator:
-    def __init__(self, logger, graph, since, lookup_file, prompt_file, api):
+    def __init__(self, logger, graph, since, lookup_file, prompt_file, api: OpenAi):
         self.logger = logger
         self.logger.info("Retrieving nx graph")
         self.G = graph.get_nx_graph(since)
@@ -59,7 +72,9 @@ class Generator:
         self.prompt_template = open(prompt_file).read()
         self.api = api
 
-    def generate_abstracts(self, conceptX, conceptY, k, min_words, max_words):
+    def generate_abstracts(
+        self, conceptX, conceptY, k, min_words, max_words, use_fine_tuned_model=False
+    ):
         neighborsX = self._strongest_neighbors(conceptX)
         neighborsY = self._strongest_neighbors(conceptY)
 
@@ -73,7 +88,9 @@ class Generator:
             max_words=max_words,
         )
         return dict(
-            abstracts=self.api.generate_abstracts(prompt),
+            abstracts=self.api.generate_abstracts(
+                prompt, use_fine_tuned_model=use_fine_tuned_model
+            ),
             neighbor_concepts=neighborsX + neighborsY,
             prompt=prompt,
         )
@@ -96,6 +113,3 @@ class Generator:
 
     def _translate(self, u):
         return self.lookup.iloc[u]["concept"]
-
-
-# Test concepts: "thermal stratification" & "biomedical alloy"
