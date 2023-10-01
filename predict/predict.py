@@ -56,7 +56,9 @@ class Predictor:
         ]  # new data format
 
         logger.info(f"Loading concept embeddings from '{concept_embeddings}'")
-        self.concept_embeddings = load_compressed(concept_embeddings)
+        self.concept_embeddings = Predictor.transform_to_array(
+            load_compressed(concept_embeddings)
+        )
 
         logger.info(f"Loading lookup from '{lookup}'")
         self.lookup = load_lookup(lookup)
@@ -152,13 +154,13 @@ class Predictor:
             feature_list = []
 
             if feature_choice[0]:
-                emb1_f = np.array(self.feature_embeddings[i1])
-                emb2_f = np.array(self.feature_embeddings[i2])
+                emb1_f = self.feature_embeddings[i1]
+                emb2_f = self.feature_embeddings[i2]
                 feature_list.extend([emb1_f, emb2_f])
 
             if feature_choice[1]:
-                emb1_c = np.array(self.concept_embeddings.get(i1, torch.zeros(768)))
-                emb2_c = np.array(self.concept_embeddings.get(i2, torch.zeros(768)))
+                emb1_c = self.concept_embeddings[i1]
+                emb2_c = self.concept_embeddings[i1]
                 feature_list.extend([emb1_c, emb2_c])
 
             assert len(feature_list) > 0
@@ -205,3 +207,15 @@ class Predictor:
         )
 
         return Model(model)
+
+    @staticmethod
+    def transform_to_array(data: dict):
+        length = max(data.keys()) + 1
+
+        # 2D array of shape (length, 768)
+        array = np.zeros((length, 768))
+
+        for key, value in data.items():
+            array[key] = np.array(value)
+
+        return array
