@@ -8,6 +8,7 @@ import logging
 import sys
 import os
 from dotenv import load_dotenv
+from ast import literal_eval
 
 load_dotenv()
 
@@ -74,15 +75,17 @@ predictor = Predictor(
     concept_embeddings=os.getenv("CONCEPT_EMBEDDINGS"),
     graph=G,
     since=int(os.getenv("SINCE")),
-    layers=os.getenv("LAYERS"),
-    model=os.getenv("MODEL"),
+    layers=literal_eval(os.getenv("LAYERS")),
+    model=literal_eval(os.getenv("MODEL")),
+    features=literal_eval(os.getenv("FEATURES")),
+    blending=literal_eval(os.getenv("BLENDING")),
 )
 generator = Generator(
     logger=logger,
     graph=G,
     since=int(os.getenv("SINCE")),
-    lookup_file="data/lookup/lookup.M.new.csv",
-    prompt_file="data/prompt.txt",
+    lookup_file=os.getenv("LOOKUP"),
+    prompt_file=os.getenv("PROMPT_FILE"),
     api=openai,
 )
 
