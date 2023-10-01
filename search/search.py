@@ -10,7 +10,9 @@ class SemanticSearch:
         self.logger = logger
         self.data = load_embeddings(embeddings)
         self.values = np.array(list(self.data.values()))
-        self.keys = np.array(list(self.data.keys()))
+        self.keys: np.array[str] = np.array(
+            list(self.data.keys())
+        )  # these should be strings, check README.md
         self.logger.info("Fitting knn")
         self.tokenizer, self.model = self.setup_model(model_name)
 
