@@ -1,0 +1,19 @@
+[workspace]
+authors = ["thomasmarwitz <thomasmarwitz3@gmail.com>"]
+channels = ["conda-forge"]
+name = "backend"
+platforms = ["osx-arm64", "linux-64"]
+version = "0.1.0"
+
+[tasks]
+build-adjacency = "python build_adjacency_index.py --graph data/graph/edges.M.pkl --since 2023 --output data/adjacency"
+
+[dependencies]
+fastapi = ">=0.136.0,<0.137"
+uvicorn = ">=0.44.0,<0.45"
+transformers = ">=5.5.4,<6"
+scikit-learn = ">=1.8.0,<2"
+pytorch = ">=2.10.0,<3"
+pandas = ">=3.0.2,<4"
+networkx = ">=3.6.1,<4"
+numpy = ">=2.4.3,<3"
