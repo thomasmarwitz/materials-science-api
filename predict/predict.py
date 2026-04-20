@@ -1,10 +1,9 @@
 import torch
 import numpy as np
-from asyncio import Lock
+from typing import Optional
 from ast import literal_eval
 
-from .bfs import bfs
-from .graph import Graph
+from .adjacency import AdjacencyIndex
 from .net import Network
 from .utils import load_compressed, load_lookup
 
@@ -41,8 +40,7 @@ class Predictor:
         lookup: str,
         feature_embeddings: str,
         concept_embeddings: str,
-        graph: Graph,
-        since: int,
+        adjacency_index: str,
         layers: list[str],
         model: list[str],
         features: list[str],
@@ -62,14 +60,8 @@ class Predictor:
 
         logger.info(f"Loading lookup from '{lookup}'")
         self.lookup = load_lookup(lookup)
-        self.lookup_c_id = {
-            concept: id
-            for concept, id in zip(self.lookup["concept"], self.lookup["id"])
-        }
-        self.lookup_id_c = {
-            id: concept
-            for concept, id in zip(self.lookup["concept"], self.lookup["id"])
-        }
+        self.lookup_c_id = dict(zip(self.lookup["concept"], self.lookup["id"]))
+        self.lookup_id_c = dict(zip(self.lookup["id"], self.lookup["concept"]))
 
         logger.info(f"Loading model from '{model}' with layers '{layers}'")
         self.model = Predictor.load_model(layers, path=model, blending=blending)
@@ -79,40 +71,36 @@ class Predictor:
         ]
         logger.info(f"Using features: {self.features}")
 
-        logger.info(f"Loading graph from '{graph}'")
-        self.g = Graph.from_edge_list(graph.get_until_year(since))
-        self.g_nx = graph.get_nx_graph(since)
-        self.graph_bfs_lock = Lock()
+        logger.info(f"Loading adjacency index from '{adjacency_index}'")
+        self.adjacency = AdjacencyIndex(adjacency_index)
 
-    async def predict(
-        self, concept: str, max_degree: int = None, min_depth: int = None, k: int = 10
+    def predict(
+        self, concept: str, max_degree: Optional[int] = None, k: Optional[int] = 10
     ):
         concept_id = self.lookup_c_id[concept]
-        pairs = await self._get_pairs(
-            concept_id, max_degree, min_depth
-        )  # decide which constellations to predict
+        pairs = self._get_pairs(concept_id, max_degree)
         inputs = self._get_embeddings(pairs, features=self.features)
         outs = self._predict(inputs)
         results = self._create_response(outs, pairs, k)
         return results
 
-    async def _get_pairs(self, concept_id, max_degree=None, min_depth=None):
+    def _get_pairs(self, concept_id, max_degree: Optional[int] = None):
         self.logger.debug("Getting pairs")
         unconnected = []
 
-        vertices = self.g.vertices
-
-        if min_depth is not None:
-            vertices = await self._filter_depth(vertices, concept_id, min_depth)
+        vertices = self.adjacency.vertices
+        neighbors = self.adjacency.neighbor_set(concept_id)
 
         for other in vertices:
+            other = int(other)
+
             if other == concept_id:
                 continue
 
-            if max_degree is not None and self.g_nx.degree[other] > max_degree:
+            if max_degree is not None and self.adjacency.degree(other) > max_degree:
                 continue
 
-            if self.g_nx.has_edge(concept_id, other):
+            if other in neighbors:
                 continue
 
             unconnected.append(other)
@@ -120,18 +108,6 @@ class Predictor:
         pairs = torch.tensor([(concept_id, other) for other in unconnected])
         self.logger.debug(f"Got {len(pairs)} pairs")
         return pairs
-
-    async def _filter_depth(self, vertices, concept_id, min_depth):
-        async with self.graph_bfs_lock:
-            self.logger.debug("Running BFS")
-            bfs(self.g_nx, concept_id)
-            self.logger.debug("Depths annoated")
-
-            vertices = [
-                node for node in vertices if self.g_nx.nodes[node]["depth"] >= min_depth
-            ]
-
-        return vertices
 
     def _get_embeddings(self, pairs, features):
         if len(features) == 1:
@@ -172,14 +148,14 @@ class Predictor:
         outs = self.model(inputs)
         return outs
 
-    def _create_response(self, outs, pairs, k):
+    def _create_response(self, outs, pairs, k: Optional[int]):
         self.logger.debug(f"Creating response of {k} data points")
         sorted_indices = np.argsort(outs)[::-1]
 
         top_k_indices = sorted_indices[:k]
 
         return [
-            dict(concept=self.lookup_id_c[pairs[i][1].item()], score=float(outs[i]))
+            {"concept": self.lookup_id_c[pairs[i][1].item()], "score": float(outs[i])}
             for i in top_k_indices
         ]
 

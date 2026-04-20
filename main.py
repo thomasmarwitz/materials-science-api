@@ -1,9 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from search.search import SemanticSearch, PlainSearch
+from fastapi.responses import FileResponse
+from search.search import PlainSearch
 from predict.predict import Predictor
-from predict.generation import Generator, OpenAi
-from predict.graph import Graph
 import logging
 import sys
 import os
@@ -48,93 +47,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-sem_search = SemanticSearch(
-    logger=logger,
-    embeddings=os.getenv("SEMANTIC_EMBEDDINGS"),
-    model_name=os.getenv("NLP_MODEL"),
-)
 plain_search = PlainSearch(
     logger=logger,
     lookup=os.getenv("LOOKUP"),
 )
-
-
-openai = OpenAi(
-    logger=logger,
-    api_key=os.getenv("OPENAI_API_KEY"),
-    organization=os.getenv("OPENAI_ORG"),
-)
-
-logger.info(f"Loading graph from '{os.getenv('GRAPH')}'")
-G = Graph.from_path(os.getenv("GRAPH"))
 
 predictor = Predictor(
     logger=logger,
     lookup=os.getenv("LOOKUP"),
     feature_embeddings=os.getenv("FEATURE_EMBEDDINGS"),
     concept_embeddings=os.getenv("CONCEPT_EMBEDDINGS"),
-    graph=G,
-    since=int(os.getenv("SINCE")),
+    adjacency_index=os.getenv("ADJACENCY_INDEX", "data/adjacency"),
     layers=literal_eval(os.getenv("LAYERS")),
     model=literal_eval(os.getenv("MODEL")),
     features=literal_eval(os.getenv("FEATURES")),
     blending=literal_eval(os.getenv("BLENDING")),
 )
-generator = Generator(
-    logger=logger,
-    graph=G,
-    since=int(os.getenv("SINCE")),
-    lookup_file=os.getenv("LOOKUP"),
-    prompt_file=os.getenv("PROMPT_FILE"),
-    api=openai,
-)
 
-logger.debug("Freeing graph from memory")
-del G
+
+@app.get("/")
+def frontend():
+    return FileResponse("frontend.html")
+
+
+@app.get("/browse")
+def browse_frontend():
+    return FileResponse("browse.html")
+
+
+@app.get("/prediction")
+def prediction_frontend():
+    return FileResponse("prediction.html")
+
+
+@app.get("/concepts")
+def concepts(query: str = ""):
+    df = plain_search.df
+
+    if query:
+        filtered = df[df["concept"].str.contains(query, case=False, na=False)]
+    else:
+        filtered = df
+
+    items = filtered["concept"].dropna().astype(str).tolist()
+
+    return {
+        "total": int(len(items)),
+        "items": items,
+    }
 
 
 @app.get("/search")
 def search(query: str, semantic: bool = False, k: int = None):
     logger.info(f"Searching term: '{query}'")
-    if semantic:
-        return sem_search.search(query, k=k)
-    else:
-        return plain_search.search(query, k=k)
+    return plain_search.search(query, k=k)
 
 
 @app.get("/predict")
-async def predict(
-    concept: str, max_degree: int = None, min_depth: int = None, k: int = 10
-):
+def predict(concept: str, k: int = 200):
     logger.info(f"Predicting for concept: '{concept}'")
-    return await predictor.predict(concept, max_degree, min_depth, k)
-
-
-# @app.get("/predict_pair")
-# def predict_pair(concept_a: str, concepts_b: str):
-#     return None
-
-
-@app.get("/generate_abstracts")
-def generate_abstracts(
-    concept_a: str = "thermal stratification",
-    concept_b: str = "biomedical alloy",
-    k: int = 3,
-    min_words: int = 100,
-    max_words: int = 150,
-):
-    if k > 10:  # not allowed
-        k = 10
-
-    if max_words > 300:  # not allowed
-        max_words = 300
-
-    response = generator.generate_abstracts(
-        concept_a,
-        concept_b,
-        k=k,
-        min_words=min_words,
-        max_words=max_words,
-        use_fine_tuned_model=False,  # use base model
-    )
-    return response
+    return predictor.predict(concept, None, k)

@@ -3,7 +3,6 @@ import sys
 import os
 from dotenv import load_dotenv
 from predict.predict import Predictor
-from predict.graph import Graph
 from ast import literal_eval
 import gzip
 
@@ -33,9 +32,6 @@ logger = setup_logger(
     os.getenv("LOGS"), level=int(os.getenv("LOG_LEVEL")), log_to_stdout=True
 )
 
-logger.info(f"Loading graph from '{os.getenv('GRAPH')}'")
-G = Graph.from_path(os.getenv("GRAPH"))
-
 logger.info(
     f"Loading model from '{os.getenv('MODEL')}' with layers '{os.getenv('LAYERS')}'"
 )
@@ -44,8 +40,7 @@ predictor = Predictor(
     lookup=os.getenv("LOOKUP"),
     feature_embeddings=os.getenv("FEATURE_EMBEDDINGS"),
     concept_embeddings=os.getenv("CONCEPT_EMBEDDINGS"),
-    graph=G,
-    since=int(os.getenv("SINCE")),
+    adjacency_index=os.getenv("ADJACENCY_INDEX", "data/adjacency"),
     layers=literal_eval(os.getenv("LAYERS")),
     model=literal_eval(os.getenv("MODEL")),
     features=literal_eval(os.getenv("FEATURES")),
@@ -59,7 +54,6 @@ def main(
 ):
     import pandas as pd
     from ast import literal_eval
-    import asyncio
     import pickle
     from pathlib import Path
 
@@ -73,28 +67,25 @@ def main(
     df = author_concepts.reset_index()
 
     for source, concepts in zip(df.source, df.llama_concepts):
-        logger.info(f"Predicting for '{source}'")
+        logger.warning(f"Predicting for '{source}'")
         results = {}
 
         for concept in concepts:
             logger.info(f"Predicting for '{concept}'")
             try:
-                scores = predictor.predict(
-                    concept=concept, max_degree=None, min_depth=None, k=None
-                )
-                results[concept] = asyncio.run(scores)
-                logger.info(f"Predicted for '{results[concept][:4]}'")
+                results[concept] = predictor.predict(concept=concept, max_degree=None)
+                logger.debug(f"Predicted for '{results[concept][:4]}'")
             except Exception as e:
                 logger.error(f"Failed to predict for '{concept}'")
                 logger.error(e)
 
-        save_to = Path(output_dir) / f"{source}.pkl"
+        save_to = Path(output_dir) / f"{source}.pkl.gz"
         logger.info(f"Saving to '{save_to}'")
 
         with gzip.open(save_to, "wb") as f:
             pickle.dump(results, f)
 
-        logger.info(f"Predicted for '{source}'")
+        logger.warning(f"Predicted for '{source}'")
 
 
 if __name__ == "__main__":
