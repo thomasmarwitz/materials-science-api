@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prediction Results</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #121212;
+        --muted: #6a6a6a;
+        --line: #ececec;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .container {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 12px 14px 24px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: flex-start;
+      }
+
+      .icon-btn {
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+      }
+
+      h1 {
+        margin: 8px 0 0;
+        font-size: 1.35rem;
+      }
+
+      .muted {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .toolbar {
+        margin-top: 12px;
+      }
+
+      .concept-input {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+        background: #fafafa;
+        color: #3a3a3a;
+      }
+
+      .meta {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .results {
+        margin-top: 12px;
+        border-top: 1px solid var(--line);
+        max-height: 72vh;
+        overflow: auto;
+      }
+
+      .status {
+        padding: 14px 4px;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 52px 1fr 140px;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 4px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .rank {
+        color: var(--muted);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .concept {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .score-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .score {
+        min-width: 58px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 760px) {
+        .container {
+          padding-top: 10px;
+        }
+
+        h1 {
+          font-size: 1.25rem;
+        }
+
+        .row {
+          grid-template-columns: 44px 1fr;
+          grid-template-rows: auto auto;
+        }
+
+        .score-wrap {
+          grid-column: 2;
+        }
+
+        .status {
+          white-space: normal;
+          overflow: visible;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <div class="topbar">
+        <button id="backBtn" class="icon-btn" aria-label="Back to Search" title="Back to Search">←</button>
+      </div>
+
+      <h1>Prediction Results</h1>
+      <p class="muted">Top 200 predictions for the selected concept.</p>
+
+      <div class="toolbar">
+        <input id="conceptInput" class="concept-input" type="text" placeholder="Concept" readonly />
+      </div>
+
+      <p id="meta" class="meta">Loading...</p>
+      <div id="results" class="results"></div>
+    </main>
+
+    <script type="module">
+      const conceptInput = document.getElementById("conceptInput");
+      const backBtn = document.getElementById("backBtn");
+      const meta = document.getElementById("meta");
+      const resultsEl = document.getElementById("results");
+
+      function getConceptFromUrl() {
+        const url = new URL(globalThis.location.href);
+        return (url.searchParams.get("concept") || "").trim();
+      }
+
+      function setConceptInUrl(concept) {
+        const url = new URL(globalThis.location.href);
+        url.searchParams.set("concept", concept);
+        globalThis.history.replaceState({}, "", url);
+      }
+
+      function normalize(value, min, max) {
+        if (max <= min) {
+          return 0.5;
+        }
+        return (value - min) / (max - min);
+      }
+
+      function renderStatus(message) {
+        resultsEl.innerHTML = `<div class="status">${message}</div>`;
+      }
+
+      function renderResults(items) {
+        if (!items.length) {
+          renderStatus("No results.");
+          return;
+        }
+
+        resultsEl.innerHTML = items
+          .map((item, index) => {
+            const score = Number(item.score) || 0;
+
+            return `
+              <div class="row">
+                <span class="rank">${index + 1}.</span>
+                <span class="concept">${item.concept}</span>
+                <span class="score-wrap">
+                  <span class="score">${score.toFixed(4)}</span>
+                </span>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      async function runPrediction() {
+        const concept = conceptInput.value.trim();
+
+        if (!concept) {
+          meta.textContent = "Select a concept from search first.";
+          renderStatus("Prediction results appear here.");
+          return;
+        }
+
+        meta.textContent = "Running prediction...";
+        renderStatus("Loading prediction results...");
+
+        try {
+          const res = await fetch(`/predict?concept=${encodeURIComponent(concept)}&k=200`);
+          const data = await res.json();
+          const items = Array.isArray(data) ? data : [];
+
+          setConceptInUrl(concept);
+          meta.textContent = `${items.length} predictions`;
+          renderResults(items);
+        } catch (error) {
+          meta.textContent = `Prediction failed for "${concept}".`;
+          renderStatus(`Error: ${error.message}`);
+        }
+      }
+
+      backBtn.addEventListener("click", () => {
+        globalThis.location.href = "/";
+      });
+
+      const initialConcept = getConceptFromUrl();
+      conceptInput.value = initialConcept;
+      await runPrediction();
+    </script>
+  </body>
+</html>

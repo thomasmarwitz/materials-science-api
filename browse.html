@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Browse Concepts</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #121212;
+        --muted: #6a6a6a;
+        --line: #ececec;
+        --accent: #1f1f1f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .container {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 18px 14px 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.35rem;
+      }
+
+      .muted {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 14px;
+      }
+
+      input,
+      button {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+        background: #fff;
+      }
+
+      input {
+        flex: 1;
+        min-width: 220px;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+      }
+
+      .index-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 12px;
+      }
+
+      .index-btn {
+        min-width: 34px;
+        text-align: center;
+        padding: 6px 8px;
+        font-size: 0.85rem;
+      }
+
+      .list {
+        max-height: 68vh;
+        overflow: auto;
+        margin-top: 12px;
+        border-top: 1px solid var(--line);
+      }
+
+      .pager {
+        margin-top: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .section-header {
+        position: sticky;
+        top: 0;
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+        padding: 10px 4px;
+        font-weight: 600;
+      }
+
+      .concept-item {
+        padding: 11px 4px;
+        border-bottom: 1px solid var(--line);
+        color: inherit;
+        text-decoration: none;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .concept-item:hover {
+        background: #fafafa;
+      }
+
+      .rank {
+        min-width: 40px;
+        color: var(--muted);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .concept-item:last-child {
+        border-bottom: 0;
+      }
+
+      @media (max-width: 700px) {
+        .toolbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .pager {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>All Concepts</h1>
+      <p class="muted">Alphabetical browse with quick jump indexing.</p>
+
+      <div class="toolbar">
+        <input id="filterInput" type="text" placeholder="Filter concepts..." />
+        <button id="backBtn">Back to Search</button>
+        <button id="reloadBtn" class="primary">Reload</button>
+      </div>
+      <div id="indexRow" class="index-row"></div>
+      <p id="meta" class="muted" style="margin-top: 10px"></p>
+      <div id="list" class="list"></div>
+      <div class="pager">
+        <div class="toolbar" style="margin-top: 0">
+          <button id="prevBtn">Prev</button>
+          <button id="nextBtn">Next</button>
+        </div>
+        <span id="pageInfo" class="muted"></span>
+      </div>
+    </main>
+
+    <script type="module">
+      const filterInput = document.getElementById("filterInput");
+      const backBtn = document.getElementById("backBtn");
+      const reloadBtn = document.getElementById("reloadBtn");
+      const indexRow = document.getElementById("indexRow");
+      const list = document.getElementById("list");
+      const meta = document.getElementById("meta");
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const pageInfo = document.getElementById("pageInfo");
+
+      let allConcepts = [];
+      let visibleConcepts = [];
+      let pageConcepts = [];
+      const indexTargets = new Map();
+      const pageSize = 500;
+      let currentPage = 0;
+
+      function firstBucket(concept) {
+        const ch = (concept?.trim()?.charAt(0) || "#").toUpperCase();
+        return /[A-Z]/.test(ch) ? ch : "#";
+      }
+
+      function renderIndexButtons() {
+        const buckets = ["#", ...Array.from({ length: 26 }, (_, i) => String.fromCodePoint(65 + i))];
+
+        indexRow.innerHTML = buckets
+          .map((bucket) => `<button class="index-btn" data-bucket="${bucket}">${bucket}</button>`)
+          .join("");
+
+        indexRow.querySelectorAll(".index-btn").forEach((button) => {
+          button.addEventListener("click", () => {
+            const bucket = button.dataset.bucket;
+            const firstIndex = visibleConcepts.findIndex((concept) => firstBucket(concept) === bucket);
+
+            if (firstIndex === -1) {
+              return;
+            }
+
+            const targetPage = Math.floor(firstIndex / pageSize);
+            if (targetPage !== currentPage) {
+              currentPage = targetPage;
+              renderList();
+            }
+
+            const target = indexTargets.get(bucket);
+            if (target) {
+              target.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          });
+        });
+      }
+
+      function renderList() {
+        indexTargets.clear();
+
+        const start = currentPage * pageSize;
+        const end = Math.min(start + pageSize, visibleConcepts.length);
+        pageConcepts = visibleConcepts.slice(start, end);
+
+        if (!pageConcepts.length) {
+          list.innerHTML = '<div class="concept-item">No concepts found.</div>';
+          meta.textContent = "0 concepts";
+          pageInfo.textContent = "0 results";
+          prevBtn.disabled = true;
+          nextBtn.disabled = true;
+          return;
+        }
+
+        const grouped = new Map();
+        const globalRank = new Map(pageConcepts.map((concept, index) => [concept, start + index + 1]));
+
+        for (const concept of pageConcepts) {
+          const bucket = firstBucket(concept);
+          if (!grouped.has(bucket)) {
+            grouped.set(bucket, []);
+          }
+          grouped.get(bucket).push(concept);
+        }
+
+        const orderedBuckets = ["#", ...Array.from({ length: 26 }, (_, i) => String.fromCodePoint(65 + i))]
+          .filter((bucket) => grouped.has(bucket));
+
+        list.innerHTML = orderedBuckets
+          .map((bucket) => {
+            const items = grouped
+              .get(bucket)
+              .map((concept) => {
+                const rank = globalRank.get(concept);
+                return `<a class="concept-item" href="/prediction?concept=${encodeURIComponent(concept)}"><span class="rank">${rank}.</span><span>${concept}</span></a>`;
+              })
+              .join("");
+
+            return `
+              <section id="bucket-${bucket}">
+                <div class="section-header">${bucket}</div>
+                ${items}
+              </section>
+            `;
+          })
+          .join("");
+
+        for (const bucket of orderedBuckets) {
+          const target = document.getElementById(`bucket-${bucket}`);
+          if (target) {
+            indexTargets.set(bucket, target);
+          }
+        }
+
+        meta.textContent = `${visibleConcepts.length} concepts`;
+        pageInfo.textContent = `${start + 1}-${end} of ${visibleConcepts.length}`;
+
+        const totalPages = Math.ceil(visibleConcepts.length / pageSize);
+        prevBtn.disabled = currentPage === 0;
+        nextBtn.disabled = currentPage + 1 >= totalPages;
+      }
+
+      function applyFilter() {
+        const query = filterInput.value.trim().toLowerCase();
+
+        if (query) {
+          visibleConcepts = allConcepts.filter((concept) => concept.toLowerCase().includes(query));
+        } else {
+          visibleConcepts = allConcepts;
+        }
+
+        currentPage = 0;
+        renderList();
+      }
+
+      async function loadConcepts() {
+        reloadBtn.disabled = true;
+        reloadBtn.textContent = "Loading...";
+        meta.textContent = "Loading concepts...";
+
+        try {
+          const res = await fetch("/concepts");
+          const data = await res.json();
+          allConcepts = Array.isArray(data.items) ? data.items : [];
+          visibleConcepts = allConcepts;
+          renderList();
+        } catch (error) {
+          list.innerHTML = `<div class="concept-item">Error loading concepts: ${error.message}</div>`;
+          meta.textContent = "Failed to load concepts.";
+        } finally {
+          reloadBtn.disabled = false;
+          reloadBtn.textContent = "Reload";
+        }
+      }
+
+      backBtn.addEventListener("click", () => {
+        globalThis.location.href = "/";
+      });
+
+      reloadBtn.addEventListener("click", loadConcepts);
+      filterInput.addEventListener("input", applyFilter);
+
+      prevBtn.addEventListener("click", () => {
+        currentPage = Math.max(0, currentPage - 1);
+        renderList();
+      });
+
+      nextBtn.addEventListener("click", () => {
+        currentPage += 1;
+        renderList();
+      });
+
+      renderIndexButtons();
+      await loadConcepts();
+    </script>
+  </body>
+</html>
