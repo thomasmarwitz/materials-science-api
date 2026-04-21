@@ -7,10 +7,11 @@
     <style>
       :root {
         --bg: #ffffff;
-        --text: #121212;
-        --muted: #6a6a6a;
-        --line: #ececec;
-        --accent: #1f1f1f;
+        --text: #1a2b28;
+        --muted: #5b7a75;
+        --line: #dbf0ec;
+        --accent: #40b0a1;
+        --accent-hover: #eaf6f4;
       }
 
       * {
@@ -27,7 +28,7 @@
       .container {
         max-width: 980px;
         margin: 0 auto;
-        padding: 18px 14px 24px;
+        padding: 32px 16px 48px;
       }
 
       h1 {
@@ -58,6 +59,12 @@
         background: #fff;
       }
 
+      input:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 0 3px var(--accent-hover);
+      }
+
       input {
         flex: 1;
         min-width: 220px;
@@ -65,12 +72,24 @@
 
       button {
         cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+        color: var(--accent);
       }
 
       button.primary {
         background: var(--accent);
         color: #fff;
         border-color: var(--accent);
+      }
+
+      button.primary:hover {
+        background: #369a8d;
+        color: #fff;
+        border-color: #369a8d;
       }
 
       .index-row {
@@ -122,8 +141,39 @@
         align-items: center;
       }
 
+      .concept-link {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+        min-width: 0;
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .help-btn {
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+        color: var(--text);
+        font-weight: 600;
+        line-height: 1;
+      }
+
       .concept-item:hover {
-        background: #fafafa;
+        background: var(--accent-hover);
+        border-color: var(--accent);
+      }
+
+      .concept-item.exact-match {
+        background: var(--accent-hover);
+        border-left: 3px solid var(--accent);
       }
 
       .rank {
@@ -131,6 +181,16 @@
         color: var(--muted);
         text-align: right;
         font-variant-numeric: tabular-nums;
+      }
+
+      .badge {
+        margin-left: auto;
+        border: 1px solid var(--accent);
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 0.72rem;
+        color: var(--accent);
+        background: var(--accent-hover);
       }
 
       .concept-item:last-child {
@@ -158,12 +218,11 @@
       <div class="toolbar">
         <input id="filterInput" type="text" placeholder="Filter concepts..." />
         <button id="backBtn">Back to Search</button>
-        <button id="reloadBtn" class="primary">Reload</button>
       </div>
       <div id="indexRow" class="index-row"></div>
       <p id="meta" class="muted" style="margin-top: 10px"></p>
       <div id="list" class="list"></div>
-      <div class="pager">
+      <div class="pager" id="pager">
         <div class="toolbar" style="margin-top: 0">
           <button id="prevBtn">Prev</button>
           <button id="nextBtn">Next</button>
@@ -175,122 +234,174 @@
     <script type="module">
       const filterInput = document.getElementById("filterInput");
       const backBtn = document.getElementById("backBtn");
-      const reloadBtn = document.getElementById("reloadBtn");
       const indexRow = document.getElementById("indexRow");
       const list = document.getElementById("list");
       const meta = document.getElementById("meta");
+      const pager = document.getElementById("pager");
       const prevBtn = document.getElementById("prevBtn");
       const nextBtn = document.getElementById("nextBtn");
       const pageInfo = document.getElementById("pageInfo");
 
       let allConcepts = [];
       let visibleConcepts = [];
-      let pageConcepts = [];
-      const indexTargets = new Map();
-      const pageSize = 500;
-      let currentPage = 0;
+      let currentFilterQuery = "";
+
+      const ALL_BUCKETS = ["#", ...Array.from({ length: 26 }, (_, i) => String.fromCodePoint(65 + i))];
+      let activeBuckets = [];
+      let groupedConcepts = new Map();
+      let currentBucket = "#";
 
       function firstBucket(concept) {
         const ch = (concept?.trim()?.charAt(0) || "#").toUpperCase();
         return /[A-Z]/.test(ch) ? ch : "#";
       }
 
-      function renderIndexButtons() {
-        const buckets = ["#", ...Array.from({ length: 26 }, (_, i) => String.fromCodePoint(65 + i))];
+      function updateGroups() {
+        groupedConcepts.clear();
+        for (const bucket of ALL_BUCKETS) {
+          groupedConcepts.set(bucket, []);
+        }
+        for (const concept of visibleConcepts) {
+          const bucket = firstBucket(concept);
+          groupedConcepts.get(bucket).push(concept);
+        }
+        activeBuckets = ALL_BUCKETS.filter((b) => groupedConcepts.get(b).length > 0);
+        if (!activeBuckets.includes(currentBucket) && activeBuckets.length > 0) {
+          currentBucket = activeBuckets[0];
+        }
+      }
 
-        indexRow.innerHTML = buckets
-          .map((bucket) => `<button class="index-btn" data-bucket="${bucket}">${bucket}</button>`)
+      function renderIndexButtons() {
+        indexRow.innerHTML = ALL_BUCKETS
+          .map((bucket) => {
+            const isEmpty = !activeBuckets.includes(bucket);
+            return `<button class="index-btn" data-bucket="${bucket}" ${
+              isEmpty ? 'disabled style="opacity:0.5"' : ""
+            }>${bucket}</button>`;
+          })
           .join("");
 
         indexRow.querySelectorAll(".index-btn").forEach((button) => {
           button.addEventListener("click", () => {
             const bucket = button.dataset.bucket;
-            const firstIndex = visibleConcepts.findIndex((concept) => firstBucket(concept) === bucket);
-
-            if (firstIndex === -1) {
-              return;
-            }
-
-            const targetPage = Math.floor(firstIndex / pageSize);
-            if (targetPage !== currentPage) {
-              currentPage = targetPage;
+            if (activeBuckets.includes(bucket)) {
+              currentBucket = bucket;
               renderList();
-            }
-
-            const target = indexTargets.get(bucket);
-            if (target) {
-              target.scrollIntoView({ behavior: "smooth", block: "start" });
+              list.scrollTop = 0;
             }
           });
         });
       }
 
       function renderList() {
-        indexTargets.clear();
-
-        const start = currentPage * pageSize;
-        const end = Math.min(start + pageSize, visibleConcepts.length);
-        pageConcepts = visibleConcepts.slice(start, end);
-
-        if (!pageConcepts.length) {
+        if (visibleConcepts.length === 0) {
           list.innerHTML = '<div class="concept-item">No concepts found.</div>';
           meta.textContent = "0 concepts";
           pageInfo.textContent = "0 results";
           prevBtn.disabled = true;
           nextBtn.disabled = true;
+          indexRow.style.display = "none";
+          pager.style.display = "flex";
           return;
         }
 
-        const grouped = new Map();
-        const globalRank = new Map(pageConcepts.map((concept, index) => [concept, start + index + 1]));
+        if (visibleConcepts.length <= 500) {
+          indexRow.style.display = "none";
+          pager.style.display = "none";
+          
+          const itemsHTML = visibleConcepts
+            .map((concept, idx) => {
+              const rank = idx + 1;
+              const isExact =
+                currentFilterQuery && concept.trim().toLowerCase() === currentFilterQuery;
+              return `
+                  <div class="concept-item ${isExact ? "exact-match" : ""}">
+                    <a class="concept-link" href="/prediction?concept=${encodeURIComponent(concept)}">
+                      <span class="rank">${rank}.</span>
+                      <span>${concept}</span>
+                    </a>
+                    ${isExact ? '<span class="badge">exact</span>' : ""}
+                    <a
+                      class="help-btn"
+                      href="/concept-mentions?concept=${encodeURIComponent(concept)}"
+                      aria-label="Show mentions for ${concept}"
+                      title="Show mentions"
+                    >?</a>
+                  </div>
+                `;
+            })
+            .join("");
 
-        for (const concept of pageConcepts) {
-          const bucket = firstBucket(concept);
-          if (!grouped.has(bucket)) {
-            grouped.set(bucket, []);
-          }
-          grouped.get(bucket).push(concept);
+          list.innerHTML = itemsHTML;
+          meta.textContent = `${visibleConcepts.length} concepts`;
+          return;
         }
 
-        const orderedBuckets = ["#", ...Array.from({ length: 26 }, (_, i) => String.fromCodePoint(65 + i))]
-          .filter((bucket) => grouped.has(bucket));
+        indexRow.style.display = "flex";
+        pager.style.display = "flex";
+        renderIndexButtons();
 
-        list.innerHTML = orderedBuckets
-          .map((bucket) => {
-            const items = grouped
-              .get(bucket)
-              .map((concept) => {
-                const rank = globalRank.get(concept);
-                return `<a class="concept-item" href="/prediction?concept=${encodeURIComponent(concept)}"><span class="rank">${rank}.</span><span>${concept}</span></a>`;
-              })
-              .join("");
+        indexRow.querySelectorAll(".index-btn").forEach((btn) => {
+          if (btn.dataset.bucket === currentBucket) {
+            btn.style.background = "var(--accent)";
+            btn.style.color = "#fff";
+            btn.style.borderColor = "var(--accent)";
+          } else {
+            btn.style.background = "";
+            btn.style.color = "";
+            btn.style.borderColor = "";
+          }
+        });
 
+        const conceptsInBucket = groupedConcepts.get(currentBucket) || [];
+
+        let bucketStartOffset = 0;
+        for (const b of activeBuckets) {
+          if (b === currentBucket) break;
+          bucketStartOffset += groupedConcepts.get(b).length;
+        }
+
+        const itemsHTML = conceptsInBucket
+          .map((concept, idx) => {
+            const rank = bucketStartOffset + idx + 1;
+            const isExact =
+              currentFilterQuery && concept.trim().toLowerCase() === currentFilterQuery;
             return `
-              <section id="bucket-${bucket}">
-                <div class="section-header">${bucket}</div>
-                ${items}
-              </section>
-            `;
+                  <div class="concept-item ${isExact ? "exact-match" : ""}">
+                    <a class="concept-link" href="/prediction?concept=${encodeURIComponent(concept)}">
+                      <span class="rank">${rank}.</span>
+                      <span>${concept}</span>
+                    </a>
+                    ${isExact ? '<span class="badge">exact</span>' : ""}
+                    <a
+                      class="help-btn"
+                      href="/concept-mentions?concept=${encodeURIComponent(concept)}"
+                      aria-label="Show mentions for ${concept}"
+                      title="Show mentions"
+                    >?</a>
+                  </div>
+                `;
           })
           .join("");
 
-        for (const bucket of orderedBuckets) {
-          const target = document.getElementById(`bucket-${bucket}`);
-          if (target) {
-            indexTargets.set(bucket, target);
-          }
-        }
+        list.innerHTML = `
+              <section id="bucket-${currentBucket}">
+                <div class="section-header">${currentBucket}</div>
+                ${itemsHTML}
+              </section>
+            `;
 
         meta.textContent = `${visibleConcepts.length} concepts`;
-        pageInfo.textContent = `${start + 1}-${end} of ${visibleConcepts.length}`;
+        pageInfo.textContent = `Letter ${currentBucket}: ${conceptsInBucket.length} results`;
 
-        const totalPages = Math.ceil(visibleConcepts.length / pageSize);
-        prevBtn.disabled = currentPage === 0;
-        nextBtn.disabled = currentPage + 1 >= totalPages;
+        const bucketIdx = activeBuckets.indexOf(currentBucket);
+        prevBtn.disabled = bucketIdx <= 0;
+        nextBtn.disabled = bucketIdx >= activeBuckets.length - 1;
       }
 
-      function applyFilter() {
+      function applyFilter(doRender = true) {
         const query = filterInput.value.trim().toLowerCase();
+        currentFilterQuery = query;
 
         if (query) {
           visibleConcepts = allConcepts.filter((concept) => concept.toLowerCase().includes(query));
@@ -298,27 +409,28 @@
           visibleConcepts = allConcepts;
         }
 
-        currentPage = 0;
-        renderList();
+        updateGroups();
+
+        if (doRender) {
+          renderList();
+        }
       }
 
       async function loadConcepts() {
-        reloadBtn.disabled = true;
-        reloadBtn.textContent = "Loading...";
         meta.textContent = "Loading concepts...";
+        list.innerHTML = "";
 
         try {
           const res = await fetch("/concepts");
           const data = await res.json();
           allConcepts = Array.isArray(data.items) ? data.items : [];
-          visibleConcepts = allConcepts;
+          allConcepts.sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+          
+          applyFilter(false);
           renderList();
         } catch (error) {
           list.innerHTML = `<div class="concept-item">Error loading concepts: ${error.message}</div>`;
           meta.textContent = "Failed to load concepts.";
-        } finally {
-          reloadBtn.disabled = false;
-          reloadBtn.textContent = "Reload";
         }
       }
 
@@ -326,20 +438,26 @@
         globalThis.location.href = "/";
       });
 
-      reloadBtn.addEventListener("click", loadConcepts);
       filterInput.addEventListener("input", applyFilter);
 
       prevBtn.addEventListener("click", () => {
-        currentPage = Math.max(0, currentPage - 1);
-        renderList();
+        const bucketIdx = activeBuckets.indexOf(currentBucket);
+        if (bucketIdx > 0) {
+          currentBucket = activeBuckets[bucketIdx - 1];
+          renderList();
+          list.scrollTop = 0;
+        }
       });
 
       nextBtn.addEventListener("click", () => {
-        currentPage += 1;
-        renderList();
+        const bucketIdx = activeBuckets.indexOf(currentBucket);
+        if (bucketIdx < activeBuckets.length - 1) {
+          currentBucket = activeBuckets[bucketIdx + 1];
+          renderList();
+          list.scrollTop = 0;
+        }
       });
 
-      renderIndexButtons();
       await loadConcepts();
     </script>
   </body>

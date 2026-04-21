@@ -7,10 +7,11 @@
     <style>
       :root {
         --bg: #ffffff;
-        --text: #121212;
-        --muted: #6a6a6a;
-        --line: #ececec;
-        --accent: #1f1f1f;
+        --text: #1a2b28;
+        --muted: #5b7a75;
+        --line: #dbf0ec;
+        --accent: #40b0a1;
+        --accent-hover: #eaf6f4;
       }
 
       * {
@@ -27,7 +28,7 @@
       .container {
         max-width: 920px;
         margin: 0 auto;
-        padding: 18px 14px 24px;
+        padding: 32px 16px 48px;
       }
 
       h1 {
@@ -59,6 +60,12 @@
         color: var(--text);
       }
 
+      input[type="text"]:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 0 3px var(--accent-hover);
+      }
+
       input[type="text"] {
         flex: 1;
         min-width: 0;
@@ -66,12 +73,24 @@
 
       button {
         cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      button:hover:not(:disabled) {
+        border-color: var(--accent);
+        color: var(--accent);
       }
 
       button.primary {
         background: var(--accent);
         color: #fff;
         border-color: var(--accent);
+      }
+
+      button.primary:hover:not(:disabled) {
+        background: #369a8d;
+        color: #fff;
+        border-color: #369a8d;
       }
 
       button:disabled {
@@ -103,7 +122,13 @@
       }
 
       .item:hover {
-        background: #fafafa;
+        background: var(--accent-hover);
+        border-color: var(--accent);
+      }
+
+      .item.exact-match {
+        background: var(--accent-hover);
+        border-left: 3px solid var(--accent);
       }
 
       .rank {
@@ -111,6 +136,16 @@
         color: var(--muted);
         font-variant-numeric: tabular-nums;
         text-align: right;
+      }
+
+      .badge {
+        margin-left: auto;
+        border: 1px solid var(--accent);
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 0.72rem;
+        color: var(--accent);
+        background: var(--accent-hover);
       }
 
       .concept {
@@ -185,15 +220,20 @@
           return;
         }
 
+        const normalizedQuery = searchState.query.trim().toLowerCase();
+
         searchResults.innerHTML = searchState.items
-          .map(
-            (concept, index) => `
-              <a class="item predict-link" href="/prediction?concept=${encodeURIComponent(concept)}">
+          .map((concept, index) => {
+            const isExact = normalizedQuery && concept.trim().toLowerCase() === normalizedQuery;
+
+            return `
+              <a class="item predict-link ${isExact ? "exact-match" : ""}" href="/prediction?concept=${encodeURIComponent(concept)}">
                 <span class="rank">${index + 1}.</span>
                 <span class="concept">${concept}</span>
+                ${isExact ? '<span class="badge">exact</span>' : ""}
               </a>
-            `
-          )
+            `;
+          })
           .join("");
       }
 

@@ -10,6 +10,27 @@ Set `ADJACENCY_INDEX` in your environment to the output directory (for example `
 
 The backend exposes `/search` and `/predict` endpoints. `/generate_abstracts` was removed.
 
+## Build concept mentions index
+
+To support concept -> work abstract lookup (`/mentions` endpoint), build the mentions index once:
+
+`pixi run build-mentions-index`
+
+This generates:
+
+- `data/lookup/lookup.M.works.csv` (lookup with `works` as JSON array of work ids)
+- `data/lookup/concept_to_work_ids.pkl.gz` (compressed concept -> work ids index)
+- `data/misc/works.abstracts.compact.csv.gz` (compressed compact works payload with `id`, `doi`, `abstract`)
+
+Optional environment variables:
+
+- `LOOKUP_WORKS` (default: `data/lookup/lookup.M.works.csv`)
+- `WORKS_COMPACT` (default: `data/misc/works.abstracts.compact.csv.gz`)
+
+Endpoint:
+
+- `GET /mentions?concept=<concept>&k=<max_results>`
+
 ## Create modified lookup.csv
 
 Add extra column `works` to `lookup.M.csv` (save it as `lookup.M.works.csv`) by running `python pimp_lookup.py`.

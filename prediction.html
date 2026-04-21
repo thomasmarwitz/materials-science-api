@@ -7,9 +7,11 @@
     <style>
       :root {
         --bg: #ffffff;
-        --text: #121212;
-        --muted: #6a6a6a;
-        --line: #ececec;
+        --text: #1a2b28;
+        --muted: #5b7a75;
+        --line: #dbf0ec;
+        --accent: #40b0a1;
+        --accent-hover: #eaf6f4;
       }
 
       * {
@@ -26,7 +28,7 @@
       .container {
         max-width: 980px;
         margin: 0 auto;
-        padding: 12px 14px 24px;
+        padding: 32px 16px 48px;
       }
 
       .topbar {
@@ -47,6 +49,13 @@
         cursor: pointer;
         font-size: 1rem;
         line-height: 1;
+        transition: all 0.2s ease;
+      }
+
+      .icon-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-hover);
       }
 
       h1 {
@@ -66,12 +75,19 @@
 
       .concept-input {
         width: 100%;
-        border: 1px solid var(--line);
+        border: 1px solid var(--accent);
         border-radius: 10px;
         padding: 10px 12px;
         font-size: 0.95rem;
-        background: #fafafa;
-        color: #3a3a3a;
+        background: var(--accent-hover);
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      .concept-input:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px var(--accent-hover);
+        border-color: var(--accent);
       }
 
       .meta {
@@ -121,12 +137,28 @@
         gap: 8px;
       }
 
+      .help-btn {
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-weight: 600;
+        line-height: 1;
+      }
+
       .score {
         min-width: 58px;
         text-align: right;
         font-variant-numeric: tabular-nums;
-        color: var(--muted);
+        color: var(--accent);
         font-size: 0.85rem;
+        font-weight: 500;
       }
 
       @media (max-width: 760px) {
@@ -214,12 +246,26 @@
                 <span class="rank">${index + 1}.</span>
                 <span class="concept">${item.concept}</span>
                 <span class="score-wrap">
+                  <button
+                    class="help-btn"
+                    type="button"
+                    data-concept="${encodeURIComponent(item.concept)}"
+                    aria-label="Show mentions for ${item.concept}"
+                    title="Show mentions"
+                  >?</button>
                   <span class="score">${score.toFixed(4)}</span>
                 </span>
               </div>
             `;
           })
           .join("");
+
+        resultsEl.querySelectorAll(".help-btn").forEach((button) => {
+          button.addEventListener("click", () => {
+            const conceptParam = button.dataset.concept || "";
+            globalThis.location.href = `/concept-mentions?concept=${conceptParam}`;
+          });
+        });
       }
 
       async function runPrediction() {
