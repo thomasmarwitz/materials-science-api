@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from typing import Optional
 from ast import literal_eval
+from collections import OrderedDict
 
 from .adjacency import AdjacencyIndex
 from .net import Network
@@ -74,22 +75,52 @@ class Predictor:
         logger.info(f"Loading adjacency index from '{adjacency_index}'")
         self.adjacency = AdjacencyIndex(adjacency_index)
 
+        self.max_pairs_cache_size = 4096
+        self.max_results_cache_size = 4096
+        self._pairs_cache = OrderedDict()
+        self._results_cache = OrderedDict()
+
     def predict(
         self, concept: str, max_degree: Optional[int] = None, k: Optional[int] = 10
     ):
         concept_id = self.lookup_c_id[concept]
+
+        results_cache_key = (concept_id, max_degree)
+        cached_results = self._cache_get(self._results_cache, results_cache_key)
+        if cached_results is not None:
+            if k is None:
+                return cached_results
+            return cached_results[:k]
+
         pairs = self._get_pairs(concept_id, max_degree)
         inputs = self._get_embeddings(pairs, features=self.features)
         outs = self._predict(inputs)
-        results = self._create_response(outs, pairs, k)
-        return results
+        all_results = self._create_response(outs, pairs, None)
+
+        self._cache_set(
+            self._results_cache,
+            results_cache_key,
+            all_results,
+            self.max_results_cache_size,
+        )
+
+        if k is None:
+            return all_results
+        return all_results[:k]
 
     def _get_pairs(self, concept_id, max_degree: Optional[int] = None):
+        cache_key = (concept_id, max_degree)
+        cached_pairs = self._cache_get(self._pairs_cache, cache_key)
+        if cached_pairs is not None:
+            self.logger.debug(f"Pairs cache hit for concept ID {concept_id}")
+            return cached_pairs
+
         self.logger.debug("Getting pairs")
         unconnected = []
 
         vertices = self.adjacency.vertices
         neighbors = self.adjacency.neighbor_set(concept_id)
+        self.logger.debug(f"Concept ID {concept_id} has {len(neighbors)} neighbors")
 
         for other in vertices:
             other = int(other)
@@ -107,6 +138,14 @@ class Predictor:
 
         pairs = torch.tensor([(concept_id, other) for other in unconnected])
         self.logger.debug(f"Got {len(pairs)} pairs")
+
+        self._cache_set(
+            self._pairs_cache,
+            cache_key,
+            pairs,
+            self.max_pairs_cache_size,
+        )
+
         return pairs
 
     def _get_embeddings(self, pairs, features):
@@ -122,26 +161,28 @@ class Predictor:
         self.logger.debug(
             f"Getting embeddings for: {len(pairs)} pairs with feature choice: {feature_choice}"
         )
-        l = []
-        for v1, v2 in pairs:
-            i1 = int(v1.item())
-            i2 = int(v2.item())
+        if len(pairs) == 0:
+            return torch.empty((0, 0), dtype=torch.float32).to(device)
 
-            feature_list = []
+        pair_indices = pairs.detach().cpu().numpy().astype(np.int64, copy=False)
+        i1 = pair_indices[:, 0]
+        i2 = pair_indices[:, 1]
 
-            if feature_choice[0]:
-                emb1_f = self.feature_embeddings[i1]
-                emb2_f = self.feature_embeddings[i2]
-                feature_list.extend([emb1_f, emb2_f])
+        feature_parts = []
 
-            if feature_choice[1]:
-                emb1_c = self.concept_embeddings[i1]
-                emb2_c = self.concept_embeddings[i1]
-                feature_list.extend([emb1_c, emb2_c])
+        if feature_choice[0]:
+            emb1_f = self.feature_embeddings[i1]
+            emb2_f = self.feature_embeddings[i2]
+            feature_parts.extend([emb1_f, emb2_f])
 
-            assert len(feature_list) > 0
-            l.append(np.concatenate(feature_list))
-        return torch.tensor(np.array(l)).float().to(device)
+        if feature_choice[1]:
+            emb1_c = self.concept_embeddings[i1]
+            emb2_c = self.concept_embeddings[i2]
+            feature_parts.extend([emb1_c, emb2_c])
+
+        assert len(feature_parts) > 0
+        stacked = np.concatenate(feature_parts, axis=1)
+        return torch.as_tensor(stacked, dtype=torch.float32, device=device)
 
     def _predict(self, inputs):
         self.logger.debug("Predicting")
@@ -152,12 +193,27 @@ class Predictor:
         self.logger.debug(f"Creating response of {k} data points")
         sorted_indices = np.argsort(outs)[::-1]
 
-        top_k_indices = sorted_indices[:k]
+        top_k_indices = sorted_indices if k is None else sorted_indices[:k]
 
         return [
             {"concept": self.lookup_id_c[pairs[i][1].item()], "score": float(outs[i])}
             for i in top_k_indices
         ]
+
+    @staticmethod
+    def _cache_get(cache, key):
+        value = cache.get(key)
+        if value is None:
+            return None
+        cache.move_to_end(key)
+        return value
+
+    @staticmethod
+    def _cache_set(cache, key, value, max_size):
+        cache[key] = value
+        cache.move_to_end(key)
+        if len(cache) > max_size:
+            cache.popitem(last=False)
 
     @staticmethod
     def load_model(layers: list[str], path: list[str], blending: list[float] = None):
