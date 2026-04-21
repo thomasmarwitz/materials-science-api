@@ -24,7 +24,7 @@ This generates:
 
 Optional environment variables:
 
-- `LOOKUP_WORKS` (default: `data/lookup/lookup.M.works.csv`)
+- `CONCEPT_WORK_IDS` (default: `data/lookup/concept_to_work_ids.pkl.gz`)
 - `WORKS_COMPACT` (default: `data/misc/works.abstracts.compact.csv.gz`)
 
 Endpoint:

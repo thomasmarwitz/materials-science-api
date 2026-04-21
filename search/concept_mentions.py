@@ -1,16 +1,16 @@
-import json
-from ast import literal_eval
+import gzip
+import pickle
 
 import pandas as pd
 
 
 class ConceptMentions:
-    def __init__(self, logger, lookup_works_path: str, works_compact_path: str):
+    def __init__(self, logger, concept_index_path: str, works_compact_path: str):
         self.logger = logger
-        self.lookup_works_path = lookup_works_path
+        self.concept_index_path = concept_index_path
         self.works_compact_path = works_compact_path
 
-        self.concept_to_work_ids = self._load_concept_index(lookup_works_path)
+        self.concept_to_work_ids = self._load_concept_index(concept_index_path)
         self.works_payload = self._load_works_payload(works_compact_path)
 
         self.logger.info(
@@ -18,32 +18,13 @@ class ConceptMentions:
             f"{len(self.works_payload)} works"
         )
 
-    def _parse_works(self, value):
-        if pd.isna(value):
-            return []
-        if isinstance(value, list):
-            return [str(v) for v in value]
-        if not isinstance(value, str):
-            return []
-
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            try:
-                parsed = literal_eval(value)
-            except (ValueError, SyntaxError):
-                return []
-
-        if isinstance(parsed, (list, set, tuple)):
-            return [str(v) for v in parsed]
-
-        return []
-
     def _load_concept_index(self, path):
-        df = pd.read_csv(path, usecols=["concept", "works"])
+        with gzip.open(path, "rb") as file_handle:
+            index = pickle.load(file_handle)
+
         return {
-            str(concept): self._parse_works(works)
-            for concept, works in zip(df["concept"], df["works"])
+            str(concept): [str(work_id) for work_id in work_ids]
+            for concept, work_ids in index.items()
         }
 
     def _load_works_payload(self, path):

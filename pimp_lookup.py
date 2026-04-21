@@ -88,7 +88,7 @@ def _normalize_elements_input(value):
         return []
 
     parsed = raw
-    if raw[0] in '[{"\'' and raw[-1] in ']}"\'':
+    if raw[0] in "[{\"'" and raw[-1] in "]}\"'":
         try:
             parsed = literal_eval(raw)
         except (ValueError, SyntaxError):

@@ -66,21 +66,23 @@ predictor = Predictor(
 )
 
 mentions = None
-lookup_works_path = os.getenv("LOOKUP_WORKS", "data/lookup/lookup.M.works.csv")
+concept_index_path = os.getenv(
+    "CONCEPT_WORK_IDS", "data/lookup/concept_to_work_ids.pkl.gz"
+)
 works_compact_path = os.getenv(
     "WORKS_COMPACT", "data/misc/works.abstracts.compact.csv.gz"
 )
 
-if os.path.exists(lookup_works_path) and os.path.exists(works_compact_path):
+if os.path.exists(concept_index_path) and os.path.exists(works_compact_path):
     mentions = ConceptMentions(
         logger=logger,
-        lookup_works_path=lookup_works_path,
+        concept_index_path=concept_index_path,
         works_compact_path=works_compact_path,
     )
 else:
     logger.warning(
         "Concept mentions index not loaded. Missing files: "
-        f"lookup='{lookup_works_path}', works='{works_compact_path}'. "
+        f"index='{concept_index_path}', works='{works_compact_path}'. "
         "Run 'python pimp_lookup.py' first."
     )
 
@@ -148,7 +150,7 @@ def concept_mentions(concept: str, k: int = 10):
             status_code=503,
             detail=(
                 "Mentions index unavailable. Build it via 'python pimp_lookup.py' and "
-                "set LOOKUP_WORKS / WORKS_COMPACT if needed."
+                "set CONCEPT_WORK_IDS / WORKS_COMPACT if needed."
             ),
         )
 
