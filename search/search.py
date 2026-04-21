@@ -61,9 +61,11 @@ class PlainSearch:
         self.logger = logger
         self.df = load_lookup(lookup)
 
-    def search(self, string, k=None):
+    def search(self, string, k=None, ignore_case=True):
         results = sorted(
-            self._plain_search(string), key=lambda x: x["count"], reverse=True
+            self._plain_search(string, ignore_case=ignore_case),
+            key=lambda x: x["count"],
+            reverse=True,
         )
 
         if k:
@@ -71,9 +73,17 @@ class PlainSearch:
 
         return results
 
-    def _plain_search(self, string):
+    def _plain_search(self, string, ignore_case=True):
+        if ignore_case:
+            query = str(string).casefold()
+            return [
+                {"concept": concept, "count": count}
+                for concept, count in zip(self.df["concept"], self.df["count"])
+                if query in str(concept).casefold()
+            ]
+
         return [
-            dict(concept=concept, count=count)
+            {"concept": concept, "count": count}
             for concept, count in zip(self.df["concept"], self.df["count"])
             if string in concept
         ]

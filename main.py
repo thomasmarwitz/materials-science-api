@@ -126,9 +126,14 @@ def concepts(query: str = ""):
 
 
 @app.get("/search")
-def search(query: str, semantic: bool = False, k: int = None):
+def search(
+    query: str,
+    semantic: bool = False,
+    k: int = None,
+    ignore_case: bool = True,
+):
     logger.info(f"Searching term: '{query}'")
-    return plain_search.search(query, k=k)
+    return plain_search.search(query, k=k, ignore_case=ignore_case)
 
 
 @app.get("/predict")

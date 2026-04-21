@@ -109,6 +109,11 @@
         word-break: break-word;
       }
 
+      .title {
+        margin-top: 6px;
+        font-size: 0.9rem;
+      }
+
       .link {
         color: var(--accent);
         text-decoration: none;
@@ -230,6 +235,82 @@
         return `https://doi.org/${normalized}`;
       }
 
+      function splitAbstract(abstract) {
+        const source = String(abstract || "").trim();
+        if (!source) {
+          return { title: "", rest: "" };
+        }
+
+        const abbreviations = new Set([
+          "e.g.",
+          "i.e.",
+          "etc.",
+          "dr.",
+          "mr.",
+          "mrs.",
+          "ms.",
+          "prof.",
+          "fig.",
+          "al.",
+          "vs.",
+          "no.",
+          "inc.",
+          "ltd.",
+          "jr.",
+          "sr.",
+          "approx.",
+        ]);
+
+        let boundary = -1;
+
+        for (let i = 0; i < source.length; i += 1) {
+          const ch = source[i];
+          if (ch !== "." && ch !== "!" && ch !== "?") {
+            continue;
+          }
+
+          const prev = i > 0 ? source[i - 1] : "";
+          const next = i + 1 < source.length ? source[i + 1] : "";
+
+          if (ch === "." && /\d/.test(prev) && /\d/.test(next)) {
+            continue;
+          }
+
+          const before = source.slice(0, i + 1).trim();
+          const token = before.split(/\s+/).pop()?.toLowerCase() || "";
+
+          if (abbreviations.has(token)) {
+            continue;
+          }
+
+          if (/^[a-z]\.$/i.test(token)) {
+            continue;
+          }
+
+          if (/^[a-z](\.[a-z])+\.?$/i.test(token)) {
+            continue;
+          }
+
+          let j = i + 1;
+          while (j < source.length && /[\s)\]"'”’]/.test(source[j])) {
+            j += 1;
+          }
+
+          if (j === source.length || /\s/.test(source[i + 1] || "")) {
+            boundary = i + 1;
+            break;
+          }
+        }
+
+        if (boundary < 0) {
+          return { title: source, rest: "" };
+        }
+
+        const title = source.slice(0, boundary).trim();
+        const rest = source.slice(boundary).trim();
+        return { title, rest };
+      }
+
       function getOpenAlexWorkUrl(id) {
         const workId = String(id || "").trim();
         if (!workId) {
@@ -250,7 +331,9 @@
             const doi = item.doi || "";
             const abstract = item.abstract || "";
             const id = item.id || "";
-            const highlightedAbstract = highlightText(abstract, concept);
+            const { title, rest } = splitAbstract(abstract);
+            const highlightedTitle = highlightText(title || "-", concept);
+            const highlightedAbstract = highlightText(rest || "-", concept);
             const doiUrl = normalizeDoiUrl(doi);
             const openAlexUrl = getOpenAlexWorkUrl(id);
             const idHtml = openAlexUrl
@@ -267,7 +350,8 @@
                   <div>
                     <div class="work-id">ID: ${idHtml}</div>
                     <div class="doi">DOI: ${doiHtml}</div>
-                    <div class="abstract">${highlightedAbstract}</div>
+                    <div class="title">Title: ${highlightedTitle}</div>
+                    <div class="abstract">Abstract: ${highlightedAbstract}</div>
                   </div>
                 </div>
               </div>
