@@ -227,7 +227,7 @@
             const isExact = normalizedQuery && concept.trim().toLowerCase() === normalizedQuery;
 
             return `
-              <a class="item predict-link ${isExact ? "exact-match" : ""}" href="/prediction?concept=${encodeURIComponent(concept)}">
+              <a class="item predict-link ${isExact ? "exact-match" : ""}" href="./prediction?concept=${encodeURIComponent(concept)}">
                 <span class="rank">${index + 1}.</span>
                 <span class="concept">${concept}</span>
                 ${isExact ? '<span class="badge">exact</span>' : ""}
@@ -248,7 +248,7 @@
         searchMeta.textContent = `Searching for "${query}"...`;
 
         try {
-          const res = await fetch(`/search?query=${encodeURIComponent(query)}`);
+          const res = await fetch(`./search?query=${encodeURIComponent(query)}`);
           const data = await res.json();
           const concepts = (Array.isArray(data) ? data : []).map((item) =>
             typeof item === "string" ? item : item.concept
@@ -274,7 +274,7 @@
       });
 
       browseBtn.addEventListener("click", () => {
-        globalThis.location.href = "/browse";
+        globalThis.location.href = "./browse";
       });
 
       searchResults.innerHTML = '<div class="item"><span>Start by searching a concept.</span></div>';

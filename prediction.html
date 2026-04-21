@@ -263,7 +263,7 @@
         resultsEl.querySelectorAll(".help-btn").forEach((button) => {
           button.addEventListener("click", () => {
             const conceptParam = button.dataset.concept || "";
-            globalThis.location.href = `/concept-mentions?concept=${conceptParam}`;
+            globalThis.location.href = `./concept-mentions?concept=${conceptParam}`;
           });
         });
       }
@@ -281,7 +281,7 @@
         renderStatus("Loading prediction results...");
 
         try {
-          const res = await fetch(`/predict?concept=${encodeURIComponent(concept)}&k=200`);
+          const res = await fetch(`./predict?concept=${encodeURIComponent(concept)}&k=200`);
           const data = await res.json();
           const items = Array.isArray(data) ? data : [];
 
@@ -295,7 +295,7 @@
       }
 
       backBtn.addEventListener("click", () => {
-        globalThis.location.href = "/";
+        globalThis.location.href = "./";
       });
 
       const initialConcept = getConceptFromUrl();

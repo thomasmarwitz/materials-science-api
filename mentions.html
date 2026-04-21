@@ -289,7 +289,7 @@
         meta.textContent = "Loading works...";
 
         try {
-          const res = await fetch(`/mentions?concept=${encodeURIComponent(concept)}&k=10`);
+          const res = await fetch(`./mentions?concept=${encodeURIComponent(concept)}&k=10`);
           const data = await res.json();
 
           if (!res.ok) {
@@ -309,7 +309,7 @@
         if (globalThis.history.length > 1) {
           globalThis.history.back();
         } else {
-          globalThis.location.href = "/";
+          globalThis.location.href = "./";
         }
       });
 

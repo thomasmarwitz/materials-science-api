@@ -316,14 +316,14 @@
                 currentFilterQuery && concept.trim().toLowerCase() === currentFilterQuery;
               return `
                   <div class="concept-item ${isExact ? "exact-match" : ""}">
-                    <a class="concept-link" href="/prediction?concept=${encodeURIComponent(concept)}">
+                    <a class="concept-link" href="./prediction?concept=${encodeURIComponent(concept)}">
                       <span class="rank">${rank}.</span>
                       <span>${concept}</span>
                     </a>
                     ${isExact ? '<span class="badge">exact</span>' : ""}
                     <a
                       class="help-btn"
-                      href="/concept-mentions?concept=${encodeURIComponent(concept)}"
+                      href="./concept-mentions?concept=${encodeURIComponent(concept)}"
                       aria-label="Show mentions for ${concept}"
                       title="Show mentions"
                     >?</a>
@@ -368,14 +368,14 @@
               currentFilterQuery && concept.trim().toLowerCase() === currentFilterQuery;
             return `
                   <div class="concept-item ${isExact ? "exact-match" : ""}">
-                    <a class="concept-link" href="/prediction?concept=${encodeURIComponent(concept)}">
+                    <a class="concept-link" href="./prediction?concept=${encodeURIComponent(concept)}">
                       <span class="rank">${rank}.</span>
                       <span>${concept}</span>
                     </a>
                     ${isExact ? '<span class="badge">exact</span>' : ""}
                     <a
                       class="help-btn"
-                      href="/concept-mentions?concept=${encodeURIComponent(concept)}"
+                      href="./concept-mentions?concept=${encodeURIComponent(concept)}"
                       aria-label="Show mentions for ${concept}"
                       title="Show mentions"
                     >?</a>
@@ -421,7 +421,7 @@
         list.innerHTML = "";
 
         try {
-          const res = await fetch("/concepts");
+          const res = await fetch("./concepts");
           const data = await res.json();
           allConcepts = Array.isArray(data.items) ? data.items : [];
           allConcepts.sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
@@ -435,7 +435,7 @@
       }
 
       backBtn.addEventListener("click", () => {
-        globalThis.location.href = "/";
+        globalThis.location.href = "./";
       });
 
       filterInput.addEventListener("input", applyFilter);

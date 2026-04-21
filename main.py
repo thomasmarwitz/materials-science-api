@@ -38,7 +38,8 @@ logger = setup_logger(
 
 origins = ["*"]
 
-app = FastAPI()
+root_path = os.getenv("ROOT_PATH", "")
+app = FastAPI(root_path=root_path)
 
 app.add_middleware(
     CORSMiddleware,
