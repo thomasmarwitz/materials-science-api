@@ -7,6 +7,7 @@ version = "0.1.0"
 
 [tasks]
 build-adjacency = "python build_adjacency_index.py --graph data/graph/edges.M.pkl --since 2023 --output data/adjacency"
+build-mentions-index = "python pimp_lookup.py"
 
 [dependencies]
 fastapi = ">=0.136.0,<0.137"

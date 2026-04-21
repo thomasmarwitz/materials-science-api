@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from search.search import PlainSearch
+from search.concept_mentions import ConceptMentions
 from predict.predict import Predictor
 import logging
 import sys
@@ -64,6 +65,25 @@ predictor = Predictor(
     blending=literal_eval(os.getenv("BLENDING")),
 )
 
+mentions = None
+lookup_works_path = os.getenv("LOOKUP_WORKS", "data/lookup/lookup.M.works.csv")
+works_compact_path = os.getenv(
+    "WORKS_COMPACT", "data/misc/works.abstracts.compact.csv.gz"
+)
+
+if os.path.exists(lookup_works_path) and os.path.exists(works_compact_path):
+    mentions = ConceptMentions(
+        logger=logger,
+        lookup_works_path=lookup_works_path,
+        works_compact_path=works_compact_path,
+    )
+else:
+    logger.warning(
+        "Concept mentions index not loaded. Missing files: "
+        f"lookup='{lookup_works_path}', works='{works_compact_path}'. "
+        "Run 'python pimp_lookup.py' first."
+    )
+
 
 @app.get("/")
 def frontend():
@@ -78,6 +98,11 @@ def browse_frontend():
 @app.get("/prediction")
 def prediction_frontend():
     return FileResponse("prediction.html")
+
+
+@app.get("/concept-mentions")
+def concept_mentions_frontend():
+    return FileResponse("mentions.html")
 
 
 @app.get("/concepts")
@@ -107,3 +132,24 @@ def search(query: str, semantic: bool = False, k: int = None):
 def predict(concept: str, k: int = 200):
     logger.info(f"Predicting for concept: '{concept}'")
     return predictor.predict(concept, None, k)
+
+
+@app.get(
+    "/mentions",
+    responses={
+        503: {"description": "Mentions index not available on this backend instance"}
+    },
+)
+def concept_mentions(concept: str, k: int = 10):
+    logger.info(f"Loading mentions for concept: '{concept}'")
+
+    if mentions is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Mentions index unavailable. Build it via 'python pimp_lookup.py' and "
+                "set LOOKUP_WORKS / WORKS_COMPACT if needed."
+            ),
+        )
+
+    return mentions.get_mentions(concept=concept, k=k)

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Concept Mentions</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #1a2b28;
+        --muted: #5b7a75;
+        --line: #dbf0ec;
+        --accent: #40b0a1;
+        --accent-hover: #eaf6f4;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .container {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 16px 48px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: flex-start;
+      }
+
+      .icon-btn {
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+        transition: all 0.2s ease;
+      }
+
+      .icon-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-hover);
+      }
+
+      h1 {
+        margin: 8px 0 0;
+        font-size: 1.35rem;
+      }
+
+      .muted {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .concept {
+        margin-top: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .list {
+        margin-top: 12px;
+        border-top: 1px solid var(--line);
+      }
+
+      .item {
+        padding: 12px 4px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 52px 1fr;
+        gap: 12px;
+        align-items: start;
+      }
+
+      .rank {
+        color: var(--muted);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .work-id {
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      .doi {
+        margin-top: 6px;
+        font-size: 0.9rem;
+        word-break: break-word;
+      }
+
+      .link {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 500;
+      }
+
+      .link:hover {
+        text-decoration: underline;
+      }
+
+      .abstract {
+        margin-top: 8px;
+        white-space: pre-wrap;
+      }
+
+      mark {
+        font-weight: 600;
+        background: var(--accent-hover);
+        color: var(--text);
+        padding: 0 4px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <div class="topbar">
+        <button id="backBtn" class="icon-btn" aria-label="Back" title="Back">←</button>
+      </div>
+
+      <h1>Concept Mentions</h1>
+      <p class="muted">Top 10 works for the selected concept.</p>
+      <p id="conceptName" class="concept"></p>
+      <p id="meta" class="muted">Loading...</p>
+
+      <div id="list" class="list"></div>
+    </main>
+
+    <script type="module">
+      const backBtn = document.getElementById("backBtn");
+      const conceptName = document.getElementById("conceptName");
+      const meta = document.getElementById("meta");
+      const list = document.getElementById("list");
+
+      function getConceptFromUrl() {
+        const url = new URL(globalThis.location.href);
+        return (url.searchParams.get("concept") || "").trim();
+      }
+
+      function renderStatus(message) {
+        list.innerHTML = `<div class="item">${escapeHtml(message)}</div>`;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function escapeRegExp(value) {
+        return String(value).replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+      }
+
+      function highlightText(text, phrase) {
+        const source = String(text || "");
+        const query = String(phrase || "").trim();
+
+        if (!source) {
+          return "-";
+        }
+
+        if (!query) {
+          return escapeHtml(source);
+        }
+
+        const pattern = new RegExp(escapeRegExp(query), "ig");
+        let cursor = 0;
+        let out = "";
+        let found = false;
+
+        for (const match of source.matchAll(pattern)) {
+          const index = match.index ?? -1;
+          if (index < 0) {
+            continue;
+          }
+
+          found = true;
+          out += escapeHtml(source.slice(cursor, index));
+          out += `<mark>${escapeHtml(match[0])}</mark>`;
+          cursor = index + match[0].length;
+        }
+
+        if (!found) {
+          return escapeHtml(source);
+        }
+
+        out += escapeHtml(source.slice(cursor));
+        return out;
+      }
+
+      function normalizeDoiUrl(doi) {
+        const source = String(doi || "").trim();
+        if (!source) {
+          return "";
+        }
+
+        if (source.startsWith("http://") || source.startsWith("https://")) {
+          return source;
+        }
+
+        const normalized = source.replace(/^doi:\s*/i, "").replace(/^https?:\/\/doi\.org\//i, "");
+        if (!normalized) {
+          return "";
+        }
+
+        return `https://doi.org/${normalized}`;
+      }
+
+      function getOpenAlexWorkUrl(id) {
+        const workId = String(id || "").trim();
+        if (!workId) {
+          return "";
+        }
+
+        return `https://openalex.org/${workId}`;
+      }
+
+      function renderItems(items, concept) {
+        if (!items.length) {
+          renderStatus("No works found.");
+          return;
+        }
+
+        list.innerHTML = items
+          .map((item, index) => {
+            const doi = item.doi || "";
+            const abstract = item.abstract || "";
+            const id = item.id || "";
+            const highlightedAbstract = highlightText(abstract, concept);
+            const doiUrl = normalizeDoiUrl(doi);
+            const openAlexUrl = getOpenAlexWorkUrl(id);
+            const idHtml = openAlexUrl
+              ? `<a class="link" href="${escapeHtml(openAlexUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(id)}</a>`
+              : escapeHtml(id || "-");
+            const doiHtml = doiUrl
+              ? `<a class="link" href="${escapeHtml(doiUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(doi || doiUrl)}</a>`
+              : escapeHtml(doi || "-");
+
+            return `
+              <div class="item">
+                <div class="row">
+                  <div class="rank">${index + 1}.</div>
+                  <div>
+                    <div class="work-id">ID: ${idHtml}</div>
+                    <div class="doi">DOI: ${doiHtml}</div>
+                    <div class="abstract">${highlightedAbstract}</div>
+                  </div>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      async function loadMentions() {
+        const concept = getConceptFromUrl();
+        conceptName.textContent = concept || "No concept selected";
+
+        if (!concept) {
+          meta.textContent = "Missing concept URL parameter.";
+          renderStatus("Please open this page with ?concept=... in the URL.");
+          return;
+        }
+
+        meta.textContent = "Loading works...";
+
+        try {
+          const res = await fetch(`/mentions?concept=${encodeURIComponent(concept)}&k=10`);
+          const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(data?.detail || "Failed to load mentions.");
+          }
+
+          const items = Array.isArray(data.items) ? data.items : [];
+          meta.textContent = `${items.length} works shown (top 10)`;
+          renderItems(items, concept);
+        } catch (error) {
+          meta.textContent = "Failed to load works.";
+          renderStatus(`Error: ${error.message}`);
+        }
+      }
+
+      backBtn.addEventListener("click", () => {
+        if (globalThis.history.length > 1) {
+          globalThis.history.back();
+        } else {
+          globalThis.location.href = "/";
+        }
+      });
+
+      await loadMentions();
+    </script>
+  </body>
+</html>
