@@ -282,7 +282,26 @@
 
         try {
           const res = await fetch(`./predict?concept=${encodeURIComponent(concept)}&k=200`);
-          const data = await res.json();
+          
+          let text = "";
+          try {
+            text = await res.text();
+          } catch (err) {
+            console.error("Failed to read response text:", err);
+          }
+
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${text.slice(0, 150)}...`);
+          }
+
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch (err) {
+            console.error("Parse error detail:", err);
+            throw new Error(`JSON Parse Error. Server returned HTML: ${text.slice(0, 100)}...`);
+          }
+
           const items = Array.isArray(data) ? data : [];
 
           setConceptInUrl(concept);
