@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Saved Concepts</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #1a2b28;
+        --muted: #5b7a75;
+        --line: #dbf0ec;
+        --accent: #40b0a1;
+        --accent-hover: #eaf6f4;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .container {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 16px 48px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: flex-start;
+        gap: 8px;
+      }
+
+      .icon-btn {
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+        transition: all 0.2s ease;
+      }
+
+      .icon-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-hover);
+      }
+
+      .nav-btn {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--text);
+        padding: 0 14px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: all 0.2s ease;
+      }
+
+      .nav-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-hover);
+      }
+
+      h1 {
+        margin: 8px 0 0;
+        font-size: 1.35rem;
+      }
+
+      .muted {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .list {
+        margin-top: 12px;
+        border-top: 1px solid var(--line);
+      }
+
+      .item {
+        padding: 12px 4px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 52px 1fr 34px;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .rank {
+        color: var(--muted);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .pair {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .label {
+        color: var(--muted);
+      }
+
+      .concept {
+        font-weight: 600;
+      }
+
+      .arrow {
+        color: var(--accent);
+      }
+
+      .delete-btn {
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        line-height: 1;
+        font-size: 0.92rem;
+        transition: all 0.2s ease;
+      }
+
+      .delete-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-hover);
+      }
+
+      .hint {
+        margin-top: 8px;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <div class="topbar">
+        <button id="backBtn" class="icon-btn" aria-label="Back" title="Back">←</button>
+        <button id="browseBtn" class="nav-btn" type="button">📚 Browse all concepts</button>
+      </div>
+
+      <h1>Saved Concepts</h1>
+      <p class="muted">Pairs of selected source concept and saved prediction.</p>
+
+      <p id="meta" class="muted"></p>
+      <div id="list" class="list"></div>
+    </main>
+
+    <script type="module">
+      const backBtn = document.getElementById("backBtn");
+      const browseBtn = document.getElementById("browseBtn");
+      const meta = document.getElementById("meta");
+      const list = document.getElementById("list");
+      const SAVED_PAIRS_KEY = "savedConceptPairs";
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function loadSavedPairs() {
+        try {
+          const raw = globalThis.localStorage.getItem(SAVED_PAIRS_KEY);
+          const parsed = raw ? JSON.parse(raw) : [];
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function persistSavedPairs(items) {
+        globalThis.localStorage.setItem(SAVED_PAIRS_KEY, JSON.stringify(items));
+      }
+
+      function renderList(items) {
+        if (!items.length) {
+          list.innerHTML = '<div class="item">No saved concept pairs yet.</div>';
+          return;
+        }
+
+        list.innerHTML = items
+          .map((item, index) => {
+            const origin = escapeHtml(item.origin || "-");
+            const suggestion = escapeHtml(item.suggestion || "-");
+
+            return `
+              <div class="item">
+                <div class="row">
+                  <span class="rank">${index + 1}.</span>
+                  <div>
+                    <div class="pair">
+                      <span class="label">From</span>
+                      <span class="concept">${origin}</span>
+                      <span class="arrow">→</span>
+                      <span class="concept">${suggestion}</span>
+                    </div>
+                  </div>
+                  <button
+                    class="delete-btn"
+                    type="button"
+                    data-index="${index}"
+                    aria-label="Delete saved concept pair"
+                    title="Delete"
+                  >🗑</button>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+
+        list.querySelectorAll(".delete-btn").forEach((button) => {
+          button.addEventListener("click", () => {
+            const index = Number(button.dataset.index);
+            if (Number.isInteger(index)) {
+              removeSavedPair(index);
+            }
+          });
+        });
+      }
+
+      function removeSavedPair(index) {
+        if (index < 0 || index >= savedPairs.length) {
+          return;
+        }
+
+        savedPairs.splice(index, 1);
+        persistSavedPairs(savedPairs);
+        updateView();
+      }
+
+      function updateView() {
+        meta.textContent = `${savedPairs.length} saved pair${savedPairs.length === 1 ? "" : "s"}`;
+        renderList(savedPairs);
+      }
+
+      backBtn.addEventListener("click", () => {
+        if (globalThis.history.length > 1) {
+          globalThis.history.back();
+        } else {
+          globalThis.location.href = "./";
+        }
+      });
+
+      browseBtn.addEventListener("click", () => {
+        globalThis.location.href = "./browse";
+      });
+
+      const savedPairs = loadSavedPairs();
+      updateView();
+    </script>
+  </body>
+</html>

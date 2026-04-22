@@ -185,7 +185,8 @@
         <button id="searchBtn" class="primary">Search</button>
       </div>
       <div class="toolbar">
-        <button id="browseBtn">Browse all concepts</button>
+        <button id="browseBtn">📚 Browse all concepts</button>
+        <button id="savedBtn">💾 Saved concepts</button>
       </div>
 
       <p id="searchMeta" class="meta"></p>
@@ -198,6 +199,7 @@
       const browseBtn = document.getElementById("browseBtn");
       const searchMeta = document.getElementById("searchMeta");
       const searchResults = document.getElementById("searchResults");
+        const savedBtn = document.getElementById("savedBtn");
 
       const searchState = {
         items: [],
@@ -276,6 +278,9 @@
       browseBtn.addEventListener("click", () => {
         globalThis.location.href = "./browse";
       });
+        savedBtn.addEventListener("click", () => {
+          globalThis.location.href = "./saved-concepts";
+        });
 
       searchResults.innerHTML = '<div class="item"><span>Start by searching a concept.</span></div>';
     </script>

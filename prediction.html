@@ -34,6 +34,7 @@
       .topbar {
         display: flex;
         justify-content: flex-start;
+        gap: 8px;
       }
 
       .icon-btn {
@@ -152,6 +153,32 @@
         line-height: 1;
       }
 
+      .save-btn {
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        line-height: 1;
+      }
+
+      .save-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-hover);
+      }
+
+      .save-btn.saved {
+        border-color: var(--accent);
+        color: #fff;
+        background: var(--accent);
+      }
+
       .score {
         min-width: 58px;
         text-align: right;
@@ -190,6 +217,7 @@
     <main class="container">
       <div class="topbar">
         <button id="backBtn" class="icon-btn" aria-label="Back to Search" title="Back to Search">←</button>
+        <button id="savedBtn" class="icon-btn" aria-label="Saved Concepts" title="Saved Concepts">💾</button>
       </div>
 
       <h1>Prediction Results</h1>
@@ -206,8 +234,10 @@
     <script type="module">
       const conceptInput = document.getElementById("conceptInput");
       const backBtn = document.getElementById("backBtn");
+      const savedBtn = document.getElementById("savedBtn");
       const meta = document.getElementById("meta");
       const resultsEl = document.getElementById("results");
+      const SAVED_PAIRS_KEY = "savedConceptPairs";
 
       function getConceptFromUrl() {
         const url = new URL(globalThis.location.href);
@@ -231,6 +261,64 @@
         resultsEl.innerHTML = `<div class="status">${message}</div>`;
       }
 
+      function loadSavedPairs() {
+        try {
+          const raw = globalThis.localStorage.getItem(SAVED_PAIRS_KEY);
+          const parsed = raw ? JSON.parse(raw) : [];
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function persistSavedPairs(items) {
+        globalThis.localStorage.setItem(SAVED_PAIRS_KEY, JSON.stringify(items));
+      }
+
+      function normalizeText(value) {
+        return String(value || "").trim().toLowerCase();
+      }
+
+      function isPairSaved(origin, suggestion) {
+        const saved = loadSavedPairs();
+        const normalizedOrigin = normalizeText(origin);
+        const normalizedSuggestion = normalizeText(suggestion);
+
+        return saved.some(
+          (item) =>
+            normalizeText(item.origin) === normalizedOrigin &&
+            normalizeText(item.suggestion) === normalizedSuggestion
+        );
+      }
+
+      function savePair(origin, suggestion) {
+        const originConcept = String(origin || "").trim();
+        const predictedConcept = String(suggestion || "").trim();
+
+        if (!originConcept || !predictedConcept) {
+          return false;
+        }
+
+        const items = loadSavedPairs();
+        const alreadySaved = items.some(
+          (item) =>
+            normalizeText(item.origin) === normalizeText(originConcept) &&
+            normalizeText(item.suggestion) === normalizeText(predictedConcept)
+        );
+
+        if (alreadySaved) {
+          return false;
+        }
+
+        items.unshift({
+          origin: originConcept,
+          suggestion: predictedConcept,
+          createdAt: new Date().toISOString(),
+        });
+        persistSavedPairs(items);
+        return true;
+      }
+
       function renderResults(items) {
         if (!items.length) {
           renderStatus("No results.");
@@ -240,6 +328,7 @@
         resultsEl.innerHTML = items
           .map((item, index) => {
             const score = Number(item.score) || 0;
+            const saved = isPairSaved(conceptInput.value.trim(), item.concept);
 
             return `
               <div class="row">
@@ -247,10 +336,17 @@
                 <span class="concept">${item.concept}</span>
                 <span class="score-wrap">
                   <button
+                    class="save-btn ${saved ? "saved" : ""}"
+                    type="button"
+                    data-concept="${encodeURIComponent(item.concept)}"
+                    aria-label="Save concept pair"
+                    title="${saved ? "Saved" : "Save suggestion"}"
+                  >${saved ? "✓" : "💾"}</button>
+                  <button
                     class="help-btn"
                     type="button"
                     data-concept="${encodeURIComponent(item.concept)}"
-                    aria-label="Show mentions for ${item.concept}"
+                    aria-label="Show mentions"
                     title="Show mentions"
                   >?</button>
                   <span class="score">${score.toFixed(4)}</span>
@@ -259,6 +355,20 @@
             `;
           })
           .join("");
+
+        resultsEl.querySelectorAll(".save-btn").forEach((button) => {
+          button.addEventListener("click", () => {
+            const savedConcept = decodeURIComponent(button.dataset.concept || "");
+            const originConcept = conceptInput.value.trim();
+            const didSave = savePair(originConcept, savedConcept);
+
+            if (didSave || isPairSaved(originConcept, savedConcept)) {
+              button.classList.add("saved");
+              button.textContent = "✓";
+              button.title = "Saved";
+            }
+          });
+        });
 
         resultsEl.querySelectorAll(".help-btn").forEach((button) => {
           button.addEventListener("click", () => {
@@ -314,7 +424,15 @@
       }
 
       backBtn.addEventListener("click", () => {
-        globalThis.location.href = "./";
+        if (globalThis.history.length > 1) {
+          globalThis.history.back();
+        } else {
+          globalThis.location.href = "./";
+        }
+      });
+
+      savedBtn.addEventListener("click", () => {
+        globalThis.location.href = "./saved-concepts";
       });
 
       const initialConcept = getConceptFromUrl();

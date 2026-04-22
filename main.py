@@ -108,6 +108,11 @@ def concept_mentions_frontend():
     return FileResponse("mentions.html")
 
 
+@app.get("/saved-concepts")
+def saved_concepts_frontend():
+    return FileResponse("saved.html")
+
+
 @app.get("/concepts")
 def concepts(query: str = ""):
     df = plain_search.df
