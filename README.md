@@ -2,6 +2,10 @@
 
 `uvicorn main:app --host 0.0.0.0 --port 8000 --reload`
 
+For production (no auto-reload):
+
+`uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --timeout-keep-alive 5`
+
 Before starting the server, build the adjacency index once:
 
 `pixi run build-adjacency`
@@ -30,6 +34,30 @@ Optional environment variables:
 Endpoint:
 
 - `GET /mentions?concept=<concept>&k=<max_results>`
+
+## Runtime hardening and logging
+
+The backend now includes request-level logging, overload protection, and bounded caches.
+
+Key environment variables:
+
+- `LOG_MAX_BYTES` (default: `10485760`) and `LOG_BACKUP_COUNT` (default: `5`) for rotating log files
+- `SLOW_REQUEST_MS` (default: `1000`) to mark slow requests as warning
+- `MAX_CONCEPTS_ITEMS` (default: `500`) max items returned by `/concepts`
+- `MAX_SEARCH_K` (default: `200`) max `k` accepted by `/search`
+- `MAX_PREDICT_K` (default: `200`) max `k` accepted by `/predict`
+- `MAX_MENTIONS_K` (default: `20`) max `k` accepted by `/mentions`
+- `MAX_CONCURRENT_PREDICT_REQUESTS` (default: `1`) parallel `predict` requests
+- `MAX_CONCURRENT_MENTIONS_REQUESTS` (default: `4`) parallel `mentions` requests
+- `OVERLOAD_WAIT_SECONDS` (default: `0.1`) queue wait before returning `503` under load
+
+Predictor cache/memory controls:
+
+- `PREDICT_PAIRS_CACHE_SIZE` (default: `32`)
+- `PREDICT_RESULTS_CACHE_SIZE` (default: `64`)
+- `PREDICT_MAX_CACHED_RESULTS_PER_CONCEPT` (default: `512`)
+- `PREDICT_MAX_PAIRS_TO_CACHE` (default: `100000`)
+- `PREDICT_MAX_PAIRS_PER_REQUEST` (default: `500000`)
 
 ## Create modified lookup.csv
 

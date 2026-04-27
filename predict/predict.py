@@ -3,6 +3,7 @@ import numpy as np
 from typing import Optional
 from ast import literal_eval
 from collections import OrderedDict
+import os
 
 from .adjacency import AdjacencyIndex
 from .net import Network
@@ -75,34 +76,64 @@ class Predictor:
         logger.info(f"Loading adjacency index from '{adjacency_index}'")
         self.adjacency = AdjacencyIndex(adjacency_index)
 
-        self.max_pairs_cache_size = 4096
-        self.max_results_cache_size = 4096
+        self.max_pairs_cache_size = Predictor._get_env_int(
+            "PREDICT_PAIRS_CACHE_SIZE", 32, min_value=0
+        )
+        self.max_results_cache_size = Predictor._get_env_int(
+            "PREDICT_RESULTS_CACHE_SIZE", 64, min_value=0
+        )
+        self.max_cached_results_per_concept = Predictor._get_env_int(
+            "PREDICT_MAX_CACHED_RESULTS_PER_CONCEPT", default=200, min_value=1
+        )
+        self.max_pairs_to_cache = Predictor._get_env_int(
+            "PREDICT_MAX_PAIRS_TO_CACHE", 100_000, min_value=0
+        )
+        self.max_pairs_per_request = Predictor._get_env_int(
+            "PREDICT_MAX_PAIRS_PER_REQUEST", 500_000, min_value=1
+        )
         self._pairs_cache = OrderedDict()
         self._results_cache = OrderedDict()
+
+        self.logger.info(
+            "Predict cache config: "
+            f"pairs_cache={self.max_pairs_cache_size}, "
+            f"results_cache={self.max_results_cache_size}, "
+            f"max_cached_results_per_concept={self.max_cached_results_per_concept}, "
+            f"max_pairs_to_cache={self.max_pairs_to_cache}, "
+            f"max_pairs_per_request={self.max_pairs_per_request}"
+        )
 
     def predict(
         self, concept: str, max_degree: Optional[int] = None, k: Optional[int] = 10
     ):
         concept_id = self.lookup_c_id[concept]
 
+        if k is not None and k <= 0:
+            raise ValueError("Parameter 'k' must be greater than 0")
+
         results_cache_key = (concept_id, max_degree)
-        cached_results = self._cache_get(self._results_cache, results_cache_key)
-        if cached_results is not None:
-            if k is None:
-                return cached_results
-            return cached_results[:k]
+        if k is not None:
+            cached_results = self._cache_get(self._results_cache, results_cache_key)
+            if cached_results is not None:
+                return cached_results[:k]
 
         pairs = self._get_pairs(concept_id, max_degree)
+        if len(pairs) == 0:
+            return []
+
         inputs = self._get_embeddings(pairs, features=self.features)
         outs = self._predict(inputs)
-        all_results = self._create_response(outs, pairs, None)
 
-        self._cache_set(
-            self._results_cache,
-            results_cache_key,
-            all_results,
-            self.max_results_cache_size,
-        )
+        response_k = None if k is None else max(k, self.max_cached_results_per_concept)
+        all_results = self._create_response(outs, pairs, response_k)
+
+        if k is not None:
+            self._cache_set(
+                self._results_cache,
+                results_cache_key,
+                all_results[: self.max_cached_results_per_concept],
+                self.max_results_cache_size,
+            )
 
         if k is None:
             return all_results
@@ -135,16 +166,22 @@ class Predictor:
                 continue
 
             unconnected.append(other)
+            if len(unconnected) > self.max_pairs_per_request:
+                raise RuntimeError(
+                    "Prediction request too large for current memory safety limit. "
+                    "Try a more specific concept or reduce search scope."
+                )
 
         pairs = torch.tensor([(concept_id, other) for other in unconnected])
         self.logger.debug(f"Got {len(pairs)} pairs")
 
-        self._cache_set(
-            self._pairs_cache,
-            cache_key,
-            pairs,
-            self.max_pairs_cache_size,
-        )
+        if len(pairs) <= self.max_pairs_to_cache:
+            self._cache_set(
+                self._pairs_cache,
+                cache_key,
+                pairs,
+                self.max_pairs_cache_size,
+            )
 
         return pairs
 
@@ -210,10 +247,28 @@ class Predictor:
 
     @staticmethod
     def _cache_set(cache, key, value, max_size):
+        if max_size <= 0:
+            return
         cache[key] = value
         cache.move_to_end(key)
         if len(cache) > max_size:
             cache.popitem(last=False)
+
+    @staticmethod
+    def _get_env_int(name: str, default: int, min_value: Optional[int] = None) -> int:
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+
+        if min_value is not None and value < min_value:
+            return min_value
+
+        return value
 
     @staticmethod
     def load_model(layers: list[str], path: list[str], blending: list[float] = None):

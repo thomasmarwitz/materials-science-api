@@ -110,6 +110,10 @@
         color: var(--muted);
       }
 
+      .status.warn {
+        color: #7a5a00;
+      }
+
       .row {
         display: grid;
         grid-template-columns: 52px 1fr 140px;
@@ -238,6 +242,8 @@
       const meta = document.getElementById("meta");
       const resultsEl = document.getElementById("results");
       const SAVED_PAIRS_KEY = "savedConceptPairs";
+      const BUSY_RETRY_DELAY_MS = 1200;
+      const MAX_BUSY_RETRIES = 8;
 
       function getConceptFromUrl() {
         const url = new URL(globalThis.location.href);
@@ -257,8 +263,27 @@
         return (value - min) / (max - min);
       }
 
-      function renderStatus(message) {
-        resultsEl.innerHTML = `<div class="status">${message}</div>`;
+      function renderStatus(message, variant = "") {
+        const safeVariant = variant ? ` ${variant}` : "";
+        resultsEl.innerHTML = `<div class="status${safeVariant}">${message}</div>`;
+      }
+
+      function sleep(ms) {
+        return new Promise((resolve) => {
+          globalThis.setTimeout(resolve, ms);
+        });
+      }
+
+      function parseErrorPayload(text) {
+        try {
+          const parsed = JSON.parse(text || "{}");
+          return {
+            detail: typeof parsed.detail === "string" ? parsed.detail : "",
+            requestId: typeof parsed.request_id === "string" ? parsed.request_id : "",
+          };
+        } catch {
+          return { detail: "", requestId: "" };
+        }
       }
 
       function loadSavedPairs() {
@@ -390,36 +415,70 @@
         meta.textContent = "Running prediction...";
         renderStatus("Loading prediction results...");
 
-        try {
-          const res = await fetch(`./predict?concept=${encodeURIComponent(concept)}&k=200`);
-          
-          let text = "";
+        for (let attempt = 0; attempt <= MAX_BUSY_RETRIES; attempt += 1) {
           try {
-            text = await res.text();
-          } catch (err) {
-            console.error("Failed to read response text:", err);
+            const res = await fetch(`./predict?concept=${encodeURIComponent(concept)}&k=200`);
+            const text = await res.text();
+
+            if (!res.ok) {
+              const payload = parseErrorPayload(text);
+              const detail = payload.detail || text || `HTTP ${res.status}`;
+
+              const isBusy =
+                res.status === 503 &&
+                detail.toLowerCase().includes("busy handling predict requests");
+
+              if (isBusy && attempt < MAX_BUSY_RETRIES) {
+                const retryInSeconds = Math.ceil(BUSY_RETRY_DELAY_MS / 1000);
+                meta.textContent = `Another prediction is currently running. Retrying... (${attempt + 1}/${MAX_BUSY_RETRIES})`;
+                renderStatus(
+                  `Server is processing another prediction. Auto-retrying in ${retryInSeconds}s...`,
+                  "warn"
+                );
+                await sleep(BUSY_RETRY_DELAY_MS);
+                continue;
+              }
+
+              if (isBusy) {
+                meta.textContent = `Prediction pending for "${concept}".`;
+                renderStatus(
+                  "Server is still busy with another prediction. Please try again in a few seconds.",
+                  "warn"
+                );
+                return;
+              }
+
+              if (res.status === 404) {
+                meta.textContent = `Prediction failed for "${concept}".`;
+                renderStatus("Concept was not found. Go back and select a valid concept.", "warn");
+                return;
+              }
+
+              if (res.status === 422) {
+                meta.textContent = `Prediction failed for "${concept}".`;
+                renderStatus("Invalid prediction request. Please retry from search.", "warn");
+                return;
+              }
+
+              const requestInfo = payload.requestId ? ` (request ${payload.requestId})` : "";
+              meta.textContent = `Prediction failed for "${concept}".`;
+              renderStatus(`Request failed with HTTP ${res.status}${requestInfo}.`, "warn");
+              return;
+            }
+
+            const data = JSON.parse(text);
+            const items = Array.isArray(data) ? data : [];
+
+            setConceptInUrl(concept);
+            meta.textContent = `${items.length} predictions`;
+            renderResults(items);
+            return;
+          } catch (error) {
+            console.error("Prediction request failed", error);
+            meta.textContent = `Prediction failed for "${concept}".`;
+            renderStatus("Network or server error while loading predictions.", "warn");
+            return;
           }
-
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${text.slice(0, 150)}...`);
-          }
-
-          let data;
-          try {
-            data = JSON.parse(text);
-          } catch (err) {
-            console.error("Parse error detail:", err);
-            throw new Error(`JSON Parse Error. Server returned HTML: ${text.slice(0, 100)}...`);
-          }
-
-          const items = Array.isArray(data) ? data : [];
-
-          setConceptInUrl(concept);
-          meta.textContent = `${items.length} predictions`;
-          renderResults(items);
-        } catch (error) {
-          meta.textContent = `Prediction failed for "${concept}".`;
-          renderStatus(`Error: ${error.message}`);
         }
       }
 

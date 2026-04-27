@@ -421,7 +421,7 @@
         list.innerHTML = "";
 
         try {
-          const res = await fetch("./concepts");
+          const res = await fetch("./concepts?all=true");
           const data = await res.json();
           allConcepts = Array.isArray(data.items) ? data.items : [];
           allConcepts.sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
