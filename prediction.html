@@ -114,6 +114,26 @@
         color: #7a5a00;
       }
 
+      .status-actions {
+        margin-top: 10px;
+      }
+
+      .status-retry-btn {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 0.9rem;
+        background: #fff;
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      .status-retry-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-hover);
+      }
+
       .row {
         display: grid;
         grid-template-columns: 52px 1fr 140px;
@@ -242,8 +262,9 @@
       const meta = document.getElementById("meta");
       const resultsEl = document.getElementById("results");
       const SAVED_PAIRS_KEY = "savedConceptPairs";
-      const BUSY_RETRY_DELAY_MS = 1200;
-      const MAX_BUSY_RETRIES = 8;
+      const BUSY_RETRY_BASE_DELAY_MS = 700;
+      const BUSY_RETRY_MAX_DELAY_MS = 10000;
+      const MAX_BUSY_RETRIES = 5;
 
       function getConceptFromUrl() {
         const url = new URL(globalThis.location.href);
@@ -263,15 +284,33 @@
         return (value - min) / (max - min);
       }
 
-      function renderStatus(message, variant = "") {
+      function renderStatus(message, variant = "", showRetryButton = false) {
         const safeVariant = variant ? ` ${variant}` : "";
-        resultsEl.innerHTML = `<div class="status${safeVariant}">${message}</div>`;
+        const actions = showRetryButton
+          ? '<div class="status-actions"><button id="statusRetryBtn" class="status-retry-btn" type="button">Retry now</button></div>'
+          : "";
+
+        resultsEl.innerHTML = `<div class="status${safeVariant}">${message}${actions}</div>`;
+
+        if (showRetryButton) {
+          const retryButton = document.getElementById("statusRetryBtn");
+          if (retryButton) {
+            retryButton.addEventListener("click", () => {
+              runPrediction();
+            });
+          }
+        }
       }
 
       function sleep(ms) {
         return new Promise((resolve) => {
           globalThis.setTimeout(resolve, ms);
         });
+      }
+
+      function getBackoffDelayMs(retryNumber) {
+        const exponential = BUSY_RETRY_BASE_DELAY_MS * 2 ** (retryNumber - 1);
+        return Math.min(exponential, BUSY_RETRY_MAX_DELAY_MS);
       }
 
       function parseErrorPayload(text) {
@@ -418,32 +457,39 @@
         for (let attempt = 0; attempt <= MAX_BUSY_RETRIES; attempt += 1) {
           try {
             const res = await fetch(`./predict?concept=${encodeURIComponent(concept)}&k=200`);
+            const requestIdHeader = (res.headers.get("x-request-id") || "").trim();
             const text = await res.text();
 
             if (!res.ok) {
               const payload = parseErrorPayload(text);
               const detail = payload.detail || text || `HTTP ${res.status}`;
+              const requestId = payload.requestId || requestIdHeader;
 
               const isBusy =
                 res.status === 503 &&
                 detail.toLowerCase().includes("busy handling predict requests");
 
               if (isBusy && attempt < MAX_BUSY_RETRIES) {
-                const retryInSeconds = Math.ceil(BUSY_RETRY_DELAY_MS / 1000);
-                meta.textContent = `Another prediction is currently running. Retrying... (${attempt + 1}/${MAX_BUSY_RETRIES})`;
+                const retryNumber = attempt + 1;
+                const backoffMs = getBackoffDelayMs(retryNumber);
+                const retryInSeconds = Math.ceil(backoffMs / 1000);
+                const requestInfo = requestId ? ` (request ${requestId})` : "";
+                meta.textContent = `Another prediction is currently running${requestInfo}. Retrying... (${retryNumber}/${MAX_BUSY_RETRIES})`;
                 renderStatus(
                   `Server is processing another prediction. Auto-retrying in ${retryInSeconds}s...`,
                   "warn"
                 );
-                await sleep(BUSY_RETRY_DELAY_MS);
+                await sleep(backoffMs);
                 continue;
               }
 
               if (isBusy) {
+                const requestInfo = requestId ? ` (request ${requestId})` : "";
                 meta.textContent = `Prediction pending for "${concept}".`;
                 renderStatus(
-                  "Server is still busy with another prediction. Please try again in a few seconds.",
-                  "warn"
+                  `Server is still busy with another prediction${requestInfo}. Please try again in a few seconds.`,
+                  "warn",
+                  true
                 );
                 return;
               }
@@ -460,11 +506,15 @@
                 return;
               }
 
-              const requestInfo = payload.requestId ? ` (request ${payload.requestId})` : "";
+              const requestInfo = requestId ? ` (request ${requestId})` : "";
               meta.textContent = `Prediction failed for "${concept}".`;
               renderStatus(`Request failed with HTTP ${res.status}${requestInfo}.`, "warn");
               return;
             }
+
+            const acceptedInfo = requestIdHeader ? ` (request ${requestIdHeader})` : "";
+            meta.textContent = `Request accepted by server${acceptedInfo}. Processing results...`;
+            renderStatus("Request accepted. Building prediction results...");
 
             const data = JSON.parse(text);
             const items = Array.isArray(data) ? data : [];
