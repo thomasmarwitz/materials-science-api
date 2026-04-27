@@ -313,6 +313,21 @@
         return Math.min(exponential, BUSY_RETRY_MAX_DELAY_MS);
       }
 
+      async function waitWithRetryCountdown(concept, retryNumber, requestInfo, backoffMs) {
+        let remainingSeconds = Math.max(1, Math.ceil(backoffMs / 1000));
+
+        while (remainingSeconds > 0) {
+          meta.textContent = `Another prediction is currently running${requestInfo}. Retrying in ${remainingSeconds}s... (${retryNumber}/${MAX_BUSY_RETRIES})`;
+          renderStatus(
+            `Server is processing another prediction. Auto-retrying in ${remainingSeconds}s...`,
+            "warn"
+          );
+
+          await sleep(1000);
+          remainingSeconds -= 1;
+        }
+      }
+
       function parseErrorPayload(text) {
         try {
           const parsed = JSON.parse(text || "{}");
@@ -472,14 +487,13 @@
               if (isBusy && attempt < MAX_BUSY_RETRIES) {
                 const retryNumber = attempt + 1;
                 const backoffMs = getBackoffDelayMs(retryNumber);
-                const retryInSeconds = Math.ceil(backoffMs / 1000);
                 const requestInfo = requestId ? ` (request ${requestId})` : "";
-                meta.textContent = `Another prediction is currently running${requestInfo}. Retrying... (${retryNumber}/${MAX_BUSY_RETRIES})`;
-                renderStatus(
-                  `Server is processing another prediction. Auto-retrying in ${retryInSeconds}s...`,
-                  "warn"
+                await waitWithRetryCountdown(
+                  concept,
+                  retryNumber,
+                  requestInfo,
+                  backoffMs
                 );
-                await sleep(backoffMs);
                 continue;
               }
 
